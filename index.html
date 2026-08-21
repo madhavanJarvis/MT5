@@ -1,0 +1,1925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F2F5FD">
+<title>FX Desk Pro — Multi-account MT5</title>
+<link rel="preconnect" href="https://rsms.me/">
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F5FD;--panel:#FFFFFF;--panel-up:#F6F8FE;--line:#E7EBF7;
+  --text:#2A3356;--mute:#7C86A6;--dim:#A6AEC9;
+  --brass:#4F7DF0;--up:#2FBF8F;--down:#EF5A75;--blue:#5B8DEF;--purple:#A78BFA;
+  --shadow:0 8px 28px rgba(90,110,190,.10);
+  --grad-blue:linear-gradient(90deg,#6E9BFF,#4F7DF0);
+  --grad-green:linear-gradient(90deg,#5BD8AD,#2FBF8F);
+  --grad-purple:linear-gradient(90deg,#C1A8FF,#A78BFA);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-family:'Inter',system-ui,sans-serif;font-feature-settings:'cv11','ss01';font-size:16px}
+@supports (font-variation-settings:normal){html{font-family:'InterVariable',system-ui,sans-serif}}
+body{background:linear-gradient(160deg,#F3F6FE 0%,#F0F7F4 55%,#F4F2FC 100%);color:var(--text);font-family:inherit;min-height:100vh;padding-bottom:44px}
+.disp{font-family:inherit;letter-spacing:-.01em}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+::-webkit-scrollbar{height:6px;width:6px}
+::-webkit-scrollbar-thumb{background:#D8DEF0;border-radius:3px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.pulse{animation:pulse 2s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+header{border-bottom:1px solid var(--line);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);z-index:10}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:17px;font-weight:700}
+.brand small{font-size:12px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;display:block}
+.hbtns{display:flex;align-items:center;gap:10px}
+.status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim)}
+.status.on{color:var(--up)}
+.icobtn{background:#fff;border:1px solid var(--line);border-radius:10px;color:var(--mute);cursor:pointer;padding:8px 11px;font-size:14px;line-height:1;box-shadow:0 2px 8px rgba(90,110,190,.06)}
+main{max-width:1720px;margin:0 auto;padding:18px 18px}
+.bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+.bento>*{grid-column:span 12;min-width:0;align-self:start}
+.sp3{grid-column:span 3!important}.sp4{grid-column:span 4!important}.sp5{grid-column:span 5!important}
+.sp6{grid-column:span 6!important}.sp7{grid-column:span 7!important}.sp8{grid-column:span 8!important}
+@media(max-width:1150px){
+  .sp7,.sp8{grid-column:span 12!important}
+  .sp3,.sp4,.sp5,.sp6{grid-column:span 6!important}
+}
+@media(max-width:740px){
+  .sp3,.sp4,.sp5,.sp6,.sp7,.sp8{grid-column:span 12!important}
+}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.stat{padding:14px 16px;min-width:0}
+.stat .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px;font-weight:600}
+.stat .val{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .sub{font-size:12px;color:var(--mute);margin-top:3px}
+.sect{font-family:inherit;font-size:14px;font-weight:700;color:var(--text);letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px}
+.sect span{font-weight:500}
+.chips{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px}
+.chip{flex-shrink:0;min-width:152px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 13px;cursor:pointer;color:var(--text);box-shadow:0 4px 14px rgba(90,110,190,.07)}
+.chip.active{border-color:var(--brass);box-shadow:0 6px 20px rgba(79,125,240,.18)}
+.chip .cl{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px}
+.chip .dot{width:8px;height:8px;border-radius:50%}
+.chip .nm{font-family:inherit;font-size:14px;font-weight:600;color:var(--mute)}
+.chip.active .nm{color:var(--text)}
+.chip .eq{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{color:var(--dim);text-align:center;padding:6px 8px 8px;font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase}
+td{padding:9px 8px;white-space:nowrap;border-bottom:1px solid #F2F4FB;text-align:center}
+tr:last-child td{border-bottom:none}
+.tblwrap{overflow-x:auto}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.bar-track{flex:1;height:9px;background:#EEF1FA;border-radius:5px;overflow:hidden}
+.bar-fill{height:100%;border-radius:5px}
+.alert{display:flex;gap:8px;align-items:flex-start;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:12px}
+.alert.err{background:#FDEEF1;border:1px solid #F6CCd5;color:#C93A56}
+.alert.warn{background:#FDF6EA;border:1px solid #F1DFC0;color:#B07E2E}
+.authbox{background:#fff;border:1px solid #C9D8FA;border-radius:16px;padding:18px;margin-bottom:12px;box-shadow:var(--shadow)}
+.authbox p{font-size:13px;color:var(--mute);line-height:1.6;margin:4px 0 10px}
+.authrow{display:flex;gap:8px}
+input,select{background:#F7F9FE;border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px 13px;font-size:14px;outline:none;width:100%}
+input:focus,select:focus{border-color:var(--brass);background:#fff}
+.btn{background:var(--grad-blue);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 4px 12px rgba(79,125,240,.28)}
+.btn:disabled{background:#DDE2F0;color:var(--dim);cursor:default;box-shadow:none}
+.btn.ghost{background:#fff;border:1px solid var(--line);color:var(--mute);box-shadow:none}
+.chart-wrap{padding:16px 10px 10px 10px}
+.analysis-hour-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:12px 0 2px}
+.analysis-hour-sections.large{grid-template-columns:1fr}
+.winner-hour-sections{display:grid;grid-template-columns:1fr;gap:16px;margin:14px 0 2px}
+@media(max-width:900px){.analysis-hour-sections{grid-template-columns:1fr}}
+svg text{font-family:'IBM Plex Mono',monospace}
+.loading{padding:40px;text-align:center;color:var(--mute);font-size:14px}
+footer{margin-top:22px;text-align:center;font-size:12px;color:var(--dim);letter-spacing:.05em}
+.stack{display:flex;flex-direction:column;gap:14px}
+.settings{max-width:620px;margin:0 auto;padding:32px 2px}
+.settings .fld{margin-bottom:14px}
+.settings label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);display:block;margin-bottom:6px;font-weight:600}
+.tabs{display:flex;gap:8px;overflow-x:auto;margin-bottom:2px;padding:2px}
+.tab{flex-shrink:0;background:#fff;border:1px solid var(--line);border-radius:999px;color:var(--mute);cursor:pointer;padding:10px 19px;font-size:13px;font-weight:600;font-family:inherit;letter-spacing:.03em;box-shadow:0 2px 8px rgba(90,110,190,.05)}
+.tab.active{background:var(--grad-blue);color:#fff;border-color:transparent;box-shadow:0 4px 14px rgba(79,125,240,.3)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}
+@media (max-width:560px){.kv{grid-template-columns:1fr}}
+.kv .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #F2F4FB;font-size:13.5px}
+.kv .k{color:var(--mute)}
+.kv .v{font-family:'IBM Plex Mono',monospace;font-weight:600}
+.heat{overflow-x:auto}
+.heat table{border-collapse:separate;border-spacing:4px;font-size:12px}
+.heat th{border:none;padding:4px 6px;text-align:center}
+.heat td{padding:0;border:none}
+.heat .cell{min-width:56px;padding:10px 6px;border-radius:9px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600}
+.heat .yr{color:var(--mute);font-family:inherit;font-weight:700;padding-right:8px;text-align:right}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 8px 4px 8px;font-size:12px;color:var(--mute)}
+.legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.hero{display:flex;gap:16px;align-items:center;padding:18px;flex-wrap:wrap}
+.hero .gaugebox{flex-shrink:0}
+.hero .bars{flex:1;min-width:220px}
+.hero .brow{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:12.5px}
+.hero .blbl{width:66px;color:var(--mute);font-weight:600}
+.hero .bval{width:44px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span style="color:var(--brass);font-size:18px">▤</span>
+    <div><h1 class="disp">FX Desk <span style="color:var(--brass)">Pro</span></h1>
+    <small>Multi-account MT5 • v4.75 — 21 Aug 2026</small></div>
+  </div>
+  <div class="hbtns">
+    <div class="status" id="status"><span id="statusDot">○</span> <span class="mono" id="statusText">connecting…</span></div>
+    <button class="icobtn" onclick="refresh(true)" title="Refresh now">⟳</button>
+    <button class="icobtn" onclick="toggleSettings()" title="Settings">⚙</button>
+  </div>
+</header>
+<main id="app"><div class="loading pulse">Connecting to your database…</div></main>
+<footer>FX Desk Pro v4.75 — 21 Aug 2026 • your Firebase database • published by FXDeskPublisher EA • no subscriptions</footer>
+
+<script>
+/* ============ CONFIG ============ */
+const FIREBASE_URL = "https://marvel-d9ca5-default-rtdb.firebaseio.com";
+const PALETTE = ["#4F7DF0","#2FBF8F","#A78BFA","#F59E6C","#38BDD8","#E36FA8"];
+const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
+const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
+const instrumentName = item => typeof item === "string" ? item : (item?.symbol ?? item?.sym ?? "");
+const compareInstruments = (a,b) => {
+  const sa=instrumentName(a), sb=instrumentName(b);
+  const ra=INSTRUMENT_ORDER.indexOf(sa), rb=INSTRUMENT_ORDER.indexOf(sb);
+  const oa=ra<0?INSTRUMENT_ORDER.length:ra, ob=rb<0?INSTRUMENT_ORDER.length:rb;
+  return oa-ob || sa.localeCompare(sb);
+};
+
+let state = {
+  accounts:null, error:null, needsAuth:false, selected:"ALL", tab:"overview",
+  lastUpdate:null, showSettings:false, tradesShown:50,
+  fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
+  aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
+  anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anLarge:false,
+  balanceMonth:"ALL",
+  tpSymbol:"ALL", tpPreset:"TODAY", tpFrom:"", tpTo:"",
+  customFrom:"", customTo:"",
+  wlPreset:"ALL", wlFrom:"", wlTo:"",
+  smPreset:"ALL", smFrom:"", smTo:"",
+  auth: localStorage.getItem(LS.auth) || "",
+  refreshMs: Number(localStorage.getItem(LS.refresh)) || 30000,
+};
+let timer = null;
+
+/* ============ HELPERS ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtMoney = (v,cur="USD") => (v==null||isNaN(v)) ? "—" :
+  (()=>{try{return new Intl.NumberFormat("en-US",{style:"currency",currency:cur,maximumFractionDigits:2}).format(v)}catch{return Number(v).toFixed(2)}})();
+const fmtNum = (v,d=2) => (v==null||isNaN(v)||!isFinite(v)) ? (v===Infinity?"∞":"—") : Number(v).toFixed(d);
+const fmtPct = (v,d=2) => (v==null||isNaN(v)||!isFinite(v)) ? "—" : Number(v).toFixed(d)+"%";
+const sColor = v => v>0 ? "var(--up)" : v<0 ? "var(--down)" : "var(--mute)";
+const IST_OFF = 19800; // UTC+5:30 (display times)
+const DAY_SHIFT = 10800; // trading day rolls at 02:30 IST = 21:00 UTC (broker server UTC+3 midnight)
+const dayKey = u => new Date((u+DAY_SHIFT)*1000).toISOString().slice(0,10); // trading day
+const istHour = u => Math.floor(((u+IST_OFF)%86400)/3600);
+const dtIstStr = u => { if(u==null) return "—"; const i=new Date((u+IST_OFF)*1000);
+  return i.toISOString().slice(0,10)+" "+i.toISOString().slice(11,16); };
+const dtStr = u => { const i=new Date((u+IST_OFF)*1000), x=new Date(u*1000);
+  return i.toISOString().slice(0,10)+" "+i.toISOString().slice(11,16)+
+    ` <span style="color:var(--dim)">(${x.toISOString().slice(11,16)} UTC)</span>`; };
+const tmStr = u => { if(!u) return "—"; const i=new Date((u+IST_OFF)*1000), x=new Date(u*1000);
+  return i.toISOString().slice(11,16)+` <span style="color:var(--dim)">(${x.toISOString().slice(11,16)} UTC)</span>`; };
+const durStr = sec => {
+  if(sec==null||isNaN(sec)) return "—";
+  if(sec<3600) return Math.round(sec/60)+"m";
+  if(sec<86400) return (sec/3600).toFixed(1)+"h";
+  return (sec/86400).toFixed(1)+"d";
+};
+const ago = ts => { if(!ts) return "never"; const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return s+"s ago"; if(s<3600) return Math.floor(s/60)+"m ago"; return Math.floor(s/3600)+"h ago"; };
+const pipSize = sym => { const s=(sym||"").toUpperCase();
+  if(s.includes("JPY")) return 0.01;
+  if(s.includes("XAU")||s.includes("GOLD")) return 0.1;
+  if(s.includes("XAG")||s.includes("SILVER")) return 0.01;
+  if(s.includes("BTC")||s.includes("ETH")) return 1;
+  return 0.0001; };
+
+/* MT5 deal/position times are broker-server timestamps. Infer each account's
+   server offset from updatedAt so UTC+3 summer and UTC+2 winter both map to
+   one canonical UTC timeline before any dashboard metric is calculated. */
+const SERVER_OFFSETS = [0,7200,10800];
+function inferServerOffset(info){
+  const stamp=Number(info?.updatedAt);
+  if(!isFinite(stamp)) return 0;
+  const skew=stamp-Date.now()/1000;
+  return SERVER_OFFSETS.reduce((best,off)=>
+    Math.abs(skew-off)<Math.abs(skew-best)?off:best,0);
+}
+const utcTime = (v,off) => v==null ? v : Number(v)-off;
+
+function realizedDayExtremes(trades,start,end){
+  let running=0, mpd=0, mld=0, mpdAt=start, mldAt=start;
+  const ordered=(trades||[]).filter(t=>t.closeTime!=null&&t.closeTime>=start&&(end==null||t.closeTime<end))
+    .slice().sort((a,b)=>a.closeTime-b.closeTime);
+  for(const t of ordered){
+    running += t.profit||0;
+    if(running>mpd){ mpd=running; mpdAt=t.closeTime; }
+    if(running<mld){ mld=running; mldAt=t.closeTime; }
+  }
+  return {mpd,mld,mpdAt,mldAt};
+}
+
+/* ============ METRICS ENGINE v2 ============ */
+function computeMetrics(dealsRaw){
+  const deals = (dealsRaw||[]).filter(Boolean).slice().sort((a,b)=>a.t-b.t);
+  if(!deals.length) return null;
+
+  let deposits=0, withdrawals=0, firstDepositTime=null;
+  const byPos = {};
+
+  for(const d of deals){
+    if(d.ty===2){
+      if((d.p||0)>=0){ deposits+=d.p||0; if(firstDepositTime==null) firstDepositTime=d.t; }
+      else withdrawals+=Math.abs(d.p||0);
+      continue;
+    }
+    const k = d.id || (d.t+"-"+d.s);
+    if(!byPos[k]) byPos[k]={symbol:d.s, openTime:null, closeTime:null, openPrice:null, closePrice:null,
+                            dir:null, volume:0, profit:0, commission:0, swap:0, closedVol:0, wOpen:0, wClose:0};
+    const P = byPos[k];
+    if(d.e===0){ // entry in — defines direction, open time & price
+      if(d.cm && !P.comment) P.comment=d.cm;
+      if(P.openTime==null || d.t<P.openTime) P.openTime=d.t;
+      if(P.dir==null) P.dir = d.ty===0 ? "BUY" : "SELL";
+      P.wOpen += (d.pr||0)*(d.v||0); P.volume += d.v||0;
+      P.commission += d.c||0; P.swap += d.sw||0;
+    } else { // out / inout / out_by — carries P/L
+      if(d.cm && !P.commentOut) P.commentOut=d.cm;
+      if(d.r===4) P.slHit=true; else if(d.r===5) P.tpHit=true; else if(d.r===6) P.soHit=true;
+      P.profit += d.p||0; P.commission += d.c||0; P.swap += d.sw||0;
+      P.wClose += (d.pr||0)*(d.v||0); P.closedVol += d.v||0;
+      if(P.closeTime==null || d.t>P.closeTime) P.closeTime=d.t;
+      if(P.dir==null) P.dir = d.ty===0 ? "SELL" : "BUY"; // fallback: out deal is opposite side
+    }
+  }
+
+  const trades=[];
+  for(const k in byPos){
+    const P=byPos[k];
+    if(P.closeTime==null) continue; // still open or orphan
+    const openPrice = P.volume>0 && P.wOpen>0 ? P.wOpen/P.volume : null;
+    const closePrice = P.closedVol>0 && P.wClose>0 ? P.wClose/P.closedVol : null;
+    const net = P.profit + P.commission + P.swap;
+    let pips=null;
+    if(openPrice!=null && closePrice!=null && P.symbol){
+      const ps=pipSize(P.symbol);
+      pips = (closePrice-openPrice)/ps * (P.dir==="BUY"?1:-1);
+    }
+    trades.push({symbol:P.symbol, dir:P.dir||"—", volume:P.volume||P.closedVol,
+      openTime:P.openTime, closeTime:P.closeTime, openPrice, closePrice,
+      profit:net, rawProfit:P.profit, commission:P.commission, swap:P.swap, pips,
+      exit: P.slHit?"SL":P.tpHit?"TP":P.soHit?"SO":"Manual",
+      comment: P.comment || P.commentOut || "",
+      duration: P.openTime!=null ? P.closeTime-P.openTime : null});
+  }
+  trades.sort((a,b)=>a.closeTime-b.closeTime);
+  const todayStart=istDayStartUnix();
+  const todayExtremes=realizedDayExtremes(trades,todayStart,todayStart+86400);
+
+  const grossProfit = trades.reduce((s,t)=>s+(t.rawProfit||0),0);
+  const tradeProfit = trades.reduce((s,t)=>s+t.profit,0); // gross profit + signed commission + swap
+  const won = trades.filter(t=>t.profit>0), lost = trades.filter(t=>t.profit<0);
+  const grossWin = won.reduce((s,t)=>s+t.profit,0);
+  const grossLoss = Math.abs(lost.reduce((s,t)=>s+t.profit,0));
+  const longs = trades.filter(t=>t.dir==="BUY"), shorts = trades.filter(t=>t.dir==="SELL");
+  const longsWon = longs.filter(t=>t.profit>0).length, shortsWon = shorts.filter(t=>t.profit>0).length;
+
+  /* ---- balance timeline / daily curves ---- */
+  let bal=0, peak=0, maxDD=0, maxDDMoney=0, highestBal=0, lowestBal=null, highestBalAt=null, lowestBalAt=null;
+  const dayBal = new Map(), dayDD = new Map(), dayProfit = new Map();
+  const dailyDD = new Map(), dailyDDMoney = new Map(), dailyPeak = new Map();
+  const dailyMaxDD = new Map(), dailyMaxDDMoney = new Map();
+  let twr=1, monthStartBal={}, growthByDay=new Map();
+  for(const d of deals){
+    const net = (d.p||0)+(d.c||0)+(d.sw||0);
+    const isTrade = d.ty!==2;
+    const balBefore = bal;
+    // TWR: only chain trading returns, deposits change base without return
+    if(isTrade && balBefore>0) twr *= (1 + net/balBefore);
+    bal += net;
+    if(highestBalAt==null || bal>highestBal){ highestBal=bal; highestBalAt=d.t; }
+    if(lowestBalAt==null || bal<lowestBal){ lowestBal=bal; lowestBalAt=d.t; }
+    if(bal>peak) peak=bal;
+    const ddPct = peak>0 ? (peak-bal)/peak*100 : 0;
+    if(ddPct>maxDD){ maxDD=ddPct; maxDDMoney=peak-bal; }
+    const dk = dayKey(d.t), mk = dk.slice(0,7);
+    if(!(mk in monthStartBal)) monthStartBal[mk] = balBefore;
+    dayBal.set(dk, bal);
+    dayDD.set(dk, Math.max(dayDD.get(dk)||0, ddPct));
+    dailyMaxDD.set(dk, Math.max(dailyMaxDD.get(dk)||0, ddPct));
+    dailyMaxDDMoney.set(dk, Math.max(dailyMaxDDMoney.get(dk)||0, peak-bal));
+    const dayPeak = Math.max(dailyPeak.get(dk)??balBefore, bal);
+    dailyPeak.set(dk, dayPeak);
+    const dayDrop = Math.max(0, dayPeak-bal);
+    dailyDDMoney.set(dk, Math.max(dailyDDMoney.get(dk)||0, dayDrop));
+    dailyDD.set(dk, dayPeak>0 ? Math.max(dailyDD.get(dk)||0, dayDrop/dayPeak*100) : 0);
+    if(isTrade) dayProfit.set(dk,(dayProfit.get(dk)||0)+net);
+    growthByDay.set(dk,(twr-1)*100);
+  }
+  const dailyGrowth = [...dayBal].map(([date,balance])=>({date,balance}));
+  const growthCurve = [...growthByDay].map(([date,g])=>({date,balance:g}));
+  const ddCurve = [...dayDD].map(([date,dd])=>({date,balance:-dd}));
+
+  const gain = (twr-1)*100;
+  const absGain = deposits>0 ? tradeProfit/deposits*100 : null;
+  const daysActive = firstDepositTime ? Math.max(1,(deals[deals.length-1].t-firstDepositTime)/86400) : null;
+  const dailyGain = daysActive && twr>0 ? (Math.pow(twr,1/daysActive)-1)*100 : null;
+  const monthlyGain = daysActive && twr>0 ? (Math.pow(twr,30.44/daysActive)-1)*100 : null;
+
+  /* ---- daily returns for sharpe ---- */
+  const dailyRet=[]; let prevB=null;
+  for(const [dk,b] of dayBal){
+    if(prevB!=null && prevB>0){ const p = dayProfit.get(dk)||0; dailyRet.push(p/prevB); }
+    prevB=b;
+  }
+  const mean = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
+  const stdev = a => { if(a.length<2) return null; const m=mean(a);
+    return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); };
+  const mR=mean(dailyRet), sR=stdev(dailyRet);
+  const sharpe = (mR!=null && sR>0) ? mR/sR*Math.sqrt(252) : null;
+  const tradeStd = stdev(trades.map(t=>t.profit));
+
+  /* ---- z-score (runs test) ---- */
+  let zScore=null;
+  if(trades.length>=15 && won.length && lost.length){
+    let R=1; for(let i=1;i<trades.length;i++){ if((trades[i].profit>0)!==(trades[i-1].profit>0)) R++; }
+    const N=trades.length, W=won.length, L=lost.length, P2=2*W*L;
+    const denom = (P2*(P2-N))/(N-1);
+    if(denom>0) zScore = (N*(R-0.5)-P2)/Math.sqrt(denom);
+  }
+
+  /* ---- AHPR / GHPR (per-trade return on running balance) ---- */
+  let runBal=0, hpr=[], g=1;
+  for(const d of deals){
+    const net=(d.p||0)+(d.c||0)+(d.sw||0);
+    if(d.ty!==2 && runBal>0){ const r=1+net/runBal; hpr.push(r); g*=r; }
+    runBal+=net;
+  }
+  const ahpr = hpr.length ? (mean(hpr)-1)*100 : null;
+  const ghpr = hpr.length && g>0 ? (Math.pow(g,1/hpr.length)-1)*100 : null;
+
+  /* ---- pips / lots / durations ---- */
+  const hasPips = trades.some(t=>t.pips!=null);
+  const totalPips = hasPips ? trades.reduce((s,t)=>s+(t.pips||0),0) : null;
+  const wonPips = hasPips ? won.reduce((s,t)=>s+(t.pips||0),0) : null;
+  const lostPips = hasPips ? lost.reduce((s,t)=>s+(t.pips||0),0) : null;
+  const totalLots = trades.reduce((s,t)=>s+(t.volume||0),0);
+  const totalCommission = trades.reduce((s,t)=>s+(t.commission||0),0);
+  const totalSwap = trades.reduce((s,t)=>s+(t.swap||0),0);
+  const durs = trades.map(t=>t.duration).filter(x=>x!=null);
+  const avgDur = durs.length ? mean(durs) : null;
+  const maxDur = durs.length ? Math.max(...durs) : null;
+
+  /* ---- monthly analytics + heatmap ---- */
+  const mm={};
+  for(const t of trades){ const k=dayKey(t.closeTime).slice(0,7);
+    mm[k]=mm[k]||{month:k,profit:0,trades:0,pips:0};
+    mm[k].profit+=t.profit; mm[k].trades++; mm[k].pips+=t.pips||0; }
+  const monthly = Object.values(mm).sort((a,b)=>a.month.localeCompare(b.month));
+  const heat={};
+  monthly.forEach(mo=>{
+    const [y,m]=mo.month.split("-");
+    const base = monthStartBal[mo.month];
+    heat[y]=heat[y]||Array(12).fill(null);
+    heat[y][Number(m)-1] = base>0 ? mo.profit/base*100 : null;
+  });
+
+  /* ---- distributions ---- */
+  const byHour = Array.from({length:24},(_, h)=>({h,trades:0,profit:0}));
+  const byDay = Array.from({length:7},(_, w)=>({w,trades:0,profit:0}));
+  for(const t of trades){
+    const ot = t.openTime ?? t.closeTime;
+    const d=new Date((ot+DAY_SHIFT)*1000);
+    byHour[istHour(ot)].trades++; byHour[istHour(ot)].profit+=t.profit;
+    byDay[d.getUTCDay()].trades++; byDay[d.getUTCDay()].profit+=t.profit;
+  }
+
+  /* ---- symbols ---- */
+  const sm={};
+  for(const t of trades){ if(!t.symbol) continue;
+    sm[t.symbol]=sm[t.symbol]||{symbol:t.symbol,profit:0,trades:0,won:0,pips:0,lots:0,longs:0,shorts:0};
+    const e=sm[t.symbol]; e.profit+=t.profit; e.trades++; if(t.profit>0)e.won++;
+    e.pips+=t.pips||0; e.lots+=t.volume||0; if(t.dir==="BUY")e.longs++; else e.shorts++; }
+  const symbols = Object.values(sm).sort(compareInstruments);
+
+  /* ---- previous-day EOD balance & today's high (IST) ---- */
+  const t0=istDayStartUnix();
+  let prevDayEOD=0, todayHighBal=null, todayLowBal=null, todayHighAt=t0, todayLowAt=t0, run=0;
+  for(const d of deals){
+    run += (d.p||0)+(d.c||0)+(d.sw||0);
+    if(d.t < t0) prevDayEOD = run;
+    else {
+      if(todayHighBal==null){ todayHighBal=prevDayEOD; todayLowBal=prevDayEOD; todayHighAt=t0; todayLowAt=t0; }
+      if(run>todayHighBal){ todayHighBal=run; todayHighAt=d.t; }
+      if(run<todayLowBal){ todayLowBal=run; todayLowAt=d.t; }
+    }
+  }
+  if(todayHighBal==null){ todayHighBal=prevDayEOD; todayHighAt=t0; }
+  if(todayLowBal==null){ todayLowBal=prevDayEOD; todayLowAt=t0; }
+
+  /* ---- today's drawdown (since trading-day start) ---- */
+  let tPeak=prevDayEOD, tBal=prevDayEOD, todayDD=0, todayDDMoney=0;
+  for(const d of deals){
+    if(d.t < t0) continue;
+    tBal += (d.p||0)+(d.c||0)+(d.sw||0);
+    if(tBal>tPeak) tPeak=tBal;
+    const drop=tPeak-tBal;
+    if(tPeak>0 && drop>todayDDMoney){ todayDDMoney=drop; todayDD=drop/tPeak*100; }
+  }
+
+  /* ---- deposit/withdrawal markers ---- */
+  const flowEvents = deals.filter(d=>d.ty===2).map(d=>({date:dayKey(d.t), amt:d.p||0}));
+
+  /* ---- balance timeline for period-start lookups ---- */
+  const timeline=[]; { let b=0; for(const d of deals){ b+=(d.p||0)+(d.c||0)+(d.sw||0); timeline.push({t:d.t,bal:b}); } }
+  const balBefore = ts => { let b=0; for(const e of timeline){ if(e.t>=ts) break; b=e.bal; } return b; };
+
+  /* ---- periods: today / week / month / year (UTC) ---- */
+  const nowU=Math.floor(Date.now()/1000);
+  const nowI=new Date((nowU+DAY_SHIFT)*1000); // shifted clock: trading-day calendar
+  const startToday=Math.floor((nowU+DAY_SHIFT)/86400)*86400-DAY_SHIFT;
+  const dow=(nowI.getUTCDay()+6)%7; // Monday=0
+  const startWeek=startToday-dow*86400;
+  const startMonth=Date.UTC(nowI.getUTCFullYear(),nowI.getUTCMonth(),1)/1000-DAY_SHIFT;
+  const startYear=Date.UTC(nowI.getUTCFullYear(),0,1)/1000-DAY_SHIFT;
+  const periodRow=(label,start)=>{
+    const tr=trades.filter(t=>t.closeTime>=start || (t.openTime!=null&&t.openTime>=start));
+    const pr=tr.reduce((s,t)=>s+t.profit,0);
+    const pp=tr.some(t=>t.pips!=null)?tr.reduce((s,t)=>s+(t.pips||0),0):null;
+    const lots=tr.reduce((s,t)=>s+(t.volume||0),0);
+    const w=tr.filter(t=>t.profit>0).length;
+    const sb=balBefore(start);
+    return {label, gain: sb>0?pr/sb*100:(deposits>0?pr/deposits*100:null),
+      profit:pr, pips:pp, win:tr.length?w/tr.length*100:null, trades:tr.length, lots};
+  };
+  const periods=[periodRow("Today",startToday),periodRow("This week",startWeek),
+                 periodRow("This month",startMonth),periodRow("This year",startYear)];
+  const todayTrades=trades.filter(t=>t.closeTime>=startToday || (t.openTime!=null&&t.openTime>=startToday));
+  const todayGrossProfit=todayTrades.reduce((s,t)=>s+(t.rawProfit||0),0);
+  const todayCommission=todayTrades.reduce((s,t)=>s+(t.commission||0),0);
+  const todaySwap=todayTrades.reduce((s,t)=>s+(t.swap||0),0);
+  const todayFinalProfit=todayTrades.reduce((s,t)=>s+t.profit,0);
+
+  /* ---- winners vs losers by hour / weekday ---- */
+  const hourWL=Array.from({length:24},(_,h)=>({label:String(h),a:0,b:0}));
+  const dayWL=Array.from({length:7},(_,w)=>({label:WEEKDAYS[w],a:0,b:0}));
+  for(const t of trades){
+    const ot=t.openTime??t.closeTime;
+    const d=new Date((ot+DAY_SHIFT)*1000);
+    const tgt=t.profit>0?"a":"b";
+    hourWL[istHour(ot)][tgt]++; dayWL[d.getUTCDay()][tgt]++;
+  }
+
+  /* ---- duration buckets ---- */
+  const durDefs=[["<1m",60],["1–2m",120],["2–3m",180],["3–5m",300],["5–15m",900],["15–60m",3600],["1–4h",14400],[">4h",Infinity]];
+  const durBuckets=durDefs.map(([label])=>({label,a:0,b:0}));
+  for(const t of trades){ if(t.duration==null) continue;
+    for(let i=0;i<durDefs.length;i++){ if(t.duration<durDefs[i][1]){ durBuckets[i][t.profit>0?"a":"b"]++; break; } } }
+
+  /* ---- risk of ruin ---- */
+  let riskOfRuin=null;
+  if(won.length&&lost.length&&deposits>0){
+    const W=won.length/trades.length, L=1-W;
+    const aw=grossWin/won.length, al=grossLoss/lost.length;
+    const edge=W*aw/(W*aw+L*al)*2-1; // normalized edge
+    const riskPct=al/Math.max(bal,deposits)*100; // avg loss as % of balance
+    riskOfRuin=[10,20,30,40,50,60,70,80,90,100].map(lvl=>{
+      let p;
+      if(edge<=0) p=100;
+      else { const units=lvl/Math.max(riskPct,0.0001);
+        p=Math.min(100,Math.pow((1-edge)/(1+edge),units)*100); }
+      return {lvl,p};
+    });
+  }
+
+  return {
+    deposits, withdrawals, profit:tradeProfit, finalProfit:tradeProfit, grossProfit, gain, absGain, dailyGain, monthlyGain,
+    highestBal, lowestBal, highestBalAt, lowestBalAt, maxDrawdown:maxDD, maxDDMoney,
+    trades:trades.length, wonTrades:won.length, lostTrades:lost.length,
+    wonTradesPercent: trades.length?won.length/trades.length*100:null,
+    longs:longs.length, shorts:shorts.length, longsWon, shortsWon,
+    profitFactor: grossLoss>0 ? grossWin/grossLoss : (grossWin>0?Infinity:null),
+    expectancy: trades.length ? tradeProfit/trades.length : null,
+    averageWin: won.length?grossWin/won.length:null,
+    averageLoss: lost.length?grossLoss/lost.length:null,
+    avgWinPips: hasPips&&won.length ? wonPips/won.length : null,
+    avgLossPips: hasPips&&lost.length ? lostPips/lost.length : null,
+    bestTrade: trades.length?Math.max(...trades.map(t=>t.profit)):null,
+    worstTrade: trades.length?Math.min(...trades.map(t=>t.profit)):null,
+    bestPips: hasPips?Math.max(...trades.map(t=>t.pips??-Infinity)):null,
+    worstPips: hasPips?Math.min(...trades.map(t=>t.pips??Infinity)):null,
+    totalPips, totalLots, totalCommission, totalSwap,
+    sharpe, tradeStd, zScore, ahpr, ghpr, avgDur, maxDur,
+    dailyGrowth, growthCurve, ddCurve, monthly, heat, byHour, byDay, symbols,
+    periods, todayGrossProfit, todayCommission, todaySwap, todayFinalProfit,
+    flowEvents, balanceTimeline:timeline, dailyProfit:Object.fromEntries(dayProfit),
+    dailyDD:Object.fromEntries(dailyDD), dailyDDMoney:Object.fromEntries(dailyDDMoney),
+    dailyMaxDD:Object.fromEntries(dailyMaxDD), dailyMaxDDMoney:Object.fromEntries(dailyMaxDDMoney),
+    hourWL, dayWL, durBuckets, riskOfRuin,
+    slHits: trades.filter(t=>t.exit==="SL").length,
+    tpHits: trades.filter(t=>t.exit==="TP").length,
+    prevDayEOD, prevDayEODAt:todayStart, todayHighBal, todayLowBal, todayHighAt, todayLowAt, todayDD, todayDDMoney,
+    mpd:todayExtremes.mpd, mld:todayExtremes.mld, mpdAt:todayExtremes.mpdAt, mldAt:todayExtremes.mldAt,
+    allTrades: trades.slice().reverse(),
+  };
+}
+
+/* ============ FETCH ============ */
+function normalizeAccount(a){
+  const info={...(a.info||{})};
+  const serverOff=inferServerOffset(info);
+  if(info.updatedAt!=null) info.updatedAt=utcTime(info.updatedAt,serverOff);
+  const positions=(Array.isArray(a.positions)?a.positions:Object.values(a.positions||{})).filter(Boolean)
+    .map(p=>({...p,openTime:utcTime(p.openTime,serverOff)}));
+  const orders=a.orders?{...a.orders,updatedAt:utcTime(a.orders.updatedAt,serverOff)}:null;
+  const deals=(Array.isArray(a.deals)?a.deals:Object.values(a.deals||{})).filter(Boolean)
+    .map(d=>({...d,t:utcTime(d.t,serverOff)}));
+  const dailyFloating=a.dailyFloating&&typeof a.dailyFloating==="object"?a.dailyFloating:{};
+  const tpSlHistory={};
+  const rawTpSl=a.tpSlHistory&&typeof a.tpSlHistory==="object"?a.tpSlHistory:{};
+  Object.entries(rawTpSl).forEach(([id,r])=>{
+    if(!r||typeof r!=="object") return;
+    tpSlHistory[id]={...r,
+      openTime:utcTime(r.openTime,serverOff),
+      closeTime:utcTime(r.closeTime,serverOff),
+      updatedAt:utcTime(r.updatedAt,serverOff)};
+  });
+  return {info,orders,positions,dailyFloating,tpSlHistory,metrics:computeMetrics(deals),serverOffset:serverOff};
+}
+async function fetchAll(){
+  let url = FIREBASE_URL + "/accounts.json";
+  if(state.auth) url += "?auth=" + encodeURIComponent(state.auth);
+  let res;
+  try { res = await fetch(url); }
+  catch(e){ throw new Error("Network error reaching the database — check your internet connection."); }
+  if(res.status===401||res.status===403){ const e=new Error("Permission denied — paste your database secret below."); e.needsAuth=true; throw e; }
+  if(!res.ok) throw new Error("Database returned HTTP "+res.status+" — check the Rules tab in Firebase.");
+  const raw = await res.json(); const out={};
+  if(raw) for(const login of Object.keys(raw)){
+    const a=raw[login]||{};
+    out[login]=normalizeAccount(a);
+  }
+  return out;
+}
+async function refresh(manual){
+  if(manual) setStatus("syncing…",false);
+  try{
+    const data=await fetchAll();
+    state.accounts=data;
+    state.error=Object.keys(data).length?null:"Connected, but no accounts yet — make sure the EA is running and publishing.";
+    state.needsAuth=false; state.lastUpdate=Date.now();
+  }catch(e){ state.error=e.message; if(e.needsAuth){state.needsAuth=true;state.accounts=null;} }
+  render();
+}
+function startTimer(){
+  clearInterval(timer);
+  timer=setInterval(()=>refresh(false), state.refreshMs);
+  setInterval(()=>{ const el=$("#statusText"); if(el&&!state.showSettings) el.textContent=ago(state.lastUpdate); },5000);
+}
+function setStatus(txt,on){ $("#statusText").textContent=txt; $("#statusDot").textContent=on?"●":"○"; $("#status").classList.toggle("on",!!on); }
+
+/* ============ SVG CHARTS ============ */
+function lineChart(points, color, {height=210, fmt=(v=>Math.round(v).toLocaleString()), fill=true, zeroLine=false, markers=null}={}){
+  if(!points||points.length<2) return "";
+  const W=900,H=height,padL=64,padB=22,padT=10,padR=10;
+  const vals=points.map(p=>p.balance);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(zeroLine){min=Math.min(min,0);max=Math.max(max,0);}
+  if(min===max){min-=1;max+=1}
+  const span=max-min; min-=span*.05; max+=span*.05;
+  const x=i=>padL+i/(points.length-1)*(W-padL-padR);
+  const y=v=>padT+(1-(v-min)/(max-min))*(H-padT-padB);
+  let line=""; points.forEach((p,i)=>{line+=(i?"L":"M")+x(i).toFixed(1)+","+y(p.balance).toFixed(1);});
+  const area=line+`L${x(points.length-1).toFixed(1)},${H-padB}L${padL},${H-padB}Z`;
+  let grid="";
+  for(let g=0;g<=4;g++){ const v=min+(max-min)*g/4, yy=y(v);
+    grid+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--line)"/>`;
+    grid+=`<text x="${padL-8}" y="${yy+3}" text-anchor="end" font-size="10" fill="var(--dim)">${fmt(v)}</text>`; }
+  const xi=[0,Math.floor(points.length/2),points.length-1]; let xl="";
+  xi.forEach(i=>{xl+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--dim)">${esc(points[i].date)}</text>`;});
+  const zl = zeroLine ? `<line x1="${padL}" y1="${y(0)}" x2="${W-padR}" y2="${y(0)}" stroke="var(--dim)"/>` : "";
+  let mk="";
+  if(points.length<=45){
+    points.forEach((p,i)=>{ mk+=`<circle cx="${x(i).toFixed(1)}" cy="${y(p.balance).toFixed(1)}" r="3" fill="#fff" stroke="${color}" stroke-width="1.8"/>`; });
+  }
+  if(markers){ const idx={}; points.forEach((p,i)=>idx[p.date]=i);
+    markers.forEach(mrk=>{ const i=idx[mrk.date]; if(i==null) return;
+      mk+=`<circle cx="${x(i).toFixed(1)}" cy="${y(points[i].balance).toFixed(1)}" r="4" fill="${mrk.amt>=0?"var(--up)":"var(--down)"}" stroke="var(--bg)" stroke-width="1.5"/>`; }); }
+  const gid="g"+Math.random().toString(36).slice(2,8);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>${grid}${zl}
+    ${fill?`<path d="${area}" fill="url(#${gid})"/>`:""}
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2"/>${xl}${mk}</svg>`;
+}
+function barChartMonths(months,{height=170,key="profit",fmt=(v=>Math.round(v).toLocaleString())}={}){
+  if(!months||!months.length) return "";
+  const W=900,H=height,padL=64,padB=22,padT=10,padR=10;
+  const vals=months.map(m=>m[key]);
+  let min=Math.min(0,...vals),max=Math.max(0,...vals); if(min===max)max+=1;
+  const y=v=>padT+(1-(v-min)/(max-min))*(H-padT-padB);
+  const bw=(W-padL-padR)/months.length;
+  let grid="";
+  for(let g=0;g<=4;g++){const v=min+(max-min)*g/4,yy=y(v);
+    grid+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--line)"/>`;
+    grid+=`<text x="${padL-8}" y="${yy+3}" text-anchor="end" font-size="10" fill="var(--dim)">${fmt(v)}</text>`;}
+  let bars="";
+  months.forEach((m,i)=>{
+    const x0=padL+i*bw+bw*.15,w=bw*.7;
+    const y0=Math.min(y(0),y(m[key])),h=Math.abs(y(0)-y(m[key]))||1;
+    bars+=`<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${m[key]>=0?"var(--up)":"var(--down)"}"/>`;
+    if(months.length<=14||i%2===0)
+      bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--dim)">${esc(String(m.month??m.label).slice(2))}</text>`;});
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block">
+    ${grid}<line x1="${padL}" y1="${y(0)}" x2="${W-padR}" y2="${y(0)}" stroke="var(--dim)"/>${bars}</svg>`;
+}
+function stackedChart(items,{height=170,colorA="var(--up)",colorB="var(--down)",scroll=false,showItemLabels=true,showSubLabels=true,showPnlLabels=false,barWidth=.64}={}){
+  // items: [{label, a(winners), b(losers)}]
+  const showSub=showItemLabels&&showSubLabels&&items.some(i=>i.subLabel);
+  const showPnl=showItemLabels&&showPnlLabels&&items.some(i=>i.pnlLabel);
+  const W=scroll?1800:900,H=height,padL=44,padB=showSub?50:(showPnl?68:(showItemLabels?34:20)),padT=14,padR=8;
+  const maxT=Math.max(1,...items.map(i=>i.a+i.b));
+  const bw=(W-padL-padR)/items.length;
+  const labelSize=showSub?11:(items.length>24?8:10);
+  const subSize=showSub?10:(items.length>24?7:9);
+  let bars="";
+  items.forEach((it,i)=>{
+    const w=bw*barWidth, x0=padL+i*bw+(bw-w)/2;
+    const hA=(it.a/maxT)*(H-padT-padB), hB=(it.b/maxT)*(H-padT-padB);
+    const yB=H-padB-hB, yA=yB-hA;
+    let rects="";
+    if(it.b>0) rects+=`<rect x="${x0.toFixed(1)}" y="${yB.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(hB,1).toFixed(1)}" rx="2" fill="${colorB}"/>`;
+    if(it.a>0) rects+=`<rect x="${x0.toFixed(1)}" y="${yA.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(hA,1).toFixed(1)}" rx="2" fill="${colorA}"/>`;
+    if(rects) bars+=`<g>${it.a+it.b?`<title>${esc(it.label)} IST${it.subLabel?" • "+esc(it.subLabel):""} • ${it.a}W / ${it.b}L</title>`:""}${rects}</g>`;
+    if(it.a>0&&hA>=15) bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${(yA+hA/2+4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">${it.a}W</text>`;
+    if(it.b>0&&hB>=15) bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${(yB+hB/2+4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">${it.b}L</text>`;
+    if(it.a+it.b>0) bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${(yA-3).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--mute)">${it.a+it.b}</text>`;
+    const showLabel=showItemLabels&&(items.length<=10||i%4===0||it.a+it.b>0);
+    if(showLabel){
+      bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${H-padB+(showSub?10:showPnl?14:18)}" text-anchor="middle" font-size="${labelSize}" fill="var(--dim)">${esc(it.displayLabel??it.label)}</text>`;
+      if(showSub) bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${H-padB+24}" text-anchor="middle" font-size="${subSize}" fill="var(--dim)">${esc(it.subLabel||"")}</text>`;
+      if(showPnl) String(it.pnlLabel||"").split(/\s{2,}/).slice(0,2).forEach((line,j)=>{
+        bars+=`<text x="${(x0+w/2).toFixed(1)}" y="${H-padB+34+j*14}" text-anchor="middle" font-size="12" fill="var(--dim)">${esc(line)}</text>`;
+      });
+    }});
+  bars+=`<text x="${padL-8}" y="${padT+6}" text-anchor="end" font-size="10" fill="var(--dim)">${maxT}</text>`;
+  bars+=`<text x="${padL-8}" y="${H-padB}" text-anchor="end" font-size="10" fill="var(--dim)">0</text>`;
+  const svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;${scroll?`min-width:${W}px`:""}">
+    <line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--line)"/>${bars}</svg>`;
+  return scroll?`<div style="overflow-x:auto;width:100%">${svg}</div>`:svg;
+}
+function timeSectionsChart(items,bucketMinutes,sectionMinutes,large=false,sectionClass="analysis-hour-sections",chartHeight=250,barWidth=.64){
+  const sections=[];
+  const barsPerSection=Math.ceil(sectionMinutes/bucketMinutes);
+  for(let i=0;i<items.length;i+=barsPerSection){
+    const start=i*bucketMinutes;
+    const end=Math.min(start+sectionMinutes,1440);
+    const group=items.slice(i,i+barsPerSection);
+    sections.push(`<div style="border:1px solid var(--line);border-radius:12px;padding:10px 8px 4px;background:var(--panel-up)">
+      <div class="sect" style="font-size:12px;padding-left:6px;margin-bottom:0">${time12(start)}–${time12(end)} IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">• ${group.length} × ${bucketMinutes} min</span></div>
+      ${stackedChart(group,{height:large?Math.round(chartHeight*1.28):chartHeight,showItemLabels:true,showSubLabels:false,showPnlLabels:true,barWidth})}</div>`);
+  }
+  return `<div class="${sectionClass}${large?" large":""}">${sections.join("")}</div>`;
+}
+function halfHourSectionsChart(items,large=false){
+  return timeSectionsChart(items,30,240,large,"analysis-hour-sections");
+}
+function quarterHourSectionsChart(items,large=false){
+  return timeSectionsChart(items,15,180,large,"winner-hour-sections",170,.32);
+}
+function spark(points,color){
+  if(!points||points.length<2) return "";
+  const w=120,h=22,min=Math.min(...points),max=Math.max(...points),r=(max-min)||1;
+  const d=points.map((p,i)=>(i?"L":"M")+(i/(points.length-1)*w).toFixed(1)+","+(h-(p-min)/r*h).toFixed(1)).join("");
+  return `<svg width="${w}" height="${h}" style="display:block;margin-top:6px;opacity:.85"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+}
+function donut(pct,color,label,sub){
+  const r=42, c=2*Math.PI*r, p=Math.max(0,Math.min(100,pct||0));
+  return `<svg width="118" height="118" viewBox="0 0 118 118">
+    <circle cx="59" cy="59" r="${r}" fill="none" stroke="#EEF1FA" stroke-width="11"/>
+    <circle cx="59" cy="59" r="${r}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round"
+      stroke-dasharray="${(p/100*c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 59 59)"/>
+    <text x="59" y="57" text-anchor="middle" font-size="20" font-weight="600" fill="var(--text)">${pct!=null?Math.round(pct):"—"}${pct!=null?"%":""}</text>
+    <text x="59" y="74" text-anchor="middle" font-size="9" fill="var(--dim)" style="letter-spacing:.08em">${esc(label)}</text>
+  </svg>`;
+}
+function heatColor(v){
+  if(v==null) return "background:#F2F4FB;color:var(--dim)";
+  const a=Math.min(Math.abs(v)/8,1)*0.5+0.14;
+  return v>=0 ? `background:rgba(47,191,143,${a.toFixed(2)});color:#0B5C42`
+              : `background:rgba(239,90,117,${a.toFixed(2)});color:#8E1F33`;
+}
+
+/* ============ RENDER ============ */
+const stat=(lbl,val,color,sub)=>`<div class="stat"><div class="lbl">${lbl}</div><div class="val" style="color:${color||"var(--text)"}">${val}</div>${sub?`<div class="sub">${sub}</div>`:""}</div>`;
+const kvRow=(k,v,color)=>`<div class="row"><span class="k">${k}</span><span class="v" style="color:${color||"var(--text)"}">${v}</span></div>`;
+
+function render(){
+  const app=$("#app");
+  setStatus(state.lastUpdate?ago(state.lastUpdate):"—", !!state.accounts&&Object.keys(state.accounts||{}).length>0);
+  if(state.showSettings){ app.innerHTML=settingsHTML(); return; }
+  let html="";
+  if(state.needsAuth){
+    html+=`<div class="authbox"><div class="disp" style="font-size:14px;font-weight:600">One more step: database secret</div>
+      <p>Paste the secret from Firebase → Project settings → Service accounts → Database secrets. Saved only in this browser.</p>
+      <div class="authrow"><input type="password" id="secretInput" placeholder="Database secret">
+      <button class="btn" onclick="saveSecret()">Connect</button></div></div>`;
+  } else if(state.error){ html+=`<div class="alert err">⚠ ${esc(state.error)}</div>`; }
+
+  const acc=state.accounts||{}; const logins=Object.keys(acc);
+  if(logins.length){
+    const totalEq=logins.reduce((s,l)=>s+(acc[l].info?.equity||0),0);
+    const totalTodayPL=logins.reduce((s,l)=>s+(acc[l].metrics?.periods?.[0]?.profit||0),0);
+    const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
+    const allCur=acc[logins[0]].info?.currency||"USD";
+    html+=`<div class="chips">`;
+    html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+    logins.forEach((l,i)=>{ const a=acc[l];
+      const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
+      html+=chipHTML(l,a.info?.label||l,fmtMoney(a.info?.equity,a.info?.currency),
+        PALETTE[i%PALETTE.length],(a.metrics?.dailyGrowth||[]).slice(-30).map(g=>g.balance),stale,
+        a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null); });
+    html+=`</div>`;
+    if(state.selected==="ALL") html+=overviewHTML(acc);
+    else if(acc[state.selected]){
+      const color=PALETTE[logins.indexOf(state.selected)%PALETTE.length];
+      html+=tabsHTML();
+      let tabHtml;
+      try { tabHtml=accountTabHTML(state.selected,acc[state.selected],color); }
+      catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
+      html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
+    }
+  } else if(!state.error&&!state.needsAuth){
+    html+=`<div class="panel loading pulse">Connecting to your database…</div>`;
+  }
+  app.innerHTML=html;
+  const si=$("#secretInput"); if(si) si.addEventListener("keydown",e=>{if(e.key==="Enter")saveSecret();});
+}
+
+function chipHTML(id,label,value,color,sparkPts,stale,todayPL=null,cur="USD",totalPL=null){
+  return `<button class="chip ${state.selected===id?"active":""}" onclick="selectAcct('${esc(id)}')">
+    <div class="cl"><span class="dot ${stale?"":"pulse"}" style="background:${stale?"var(--dim)":color}"></span>
+    <span class="nm">${esc(label)}</span></div><div class="eq">${value}</div>
+    ${todayPL!=null?`<div class="mono" style="font-size:14px;font-weight:600;color:${sColor(todayPL)};margin-top:5px;text-align:center">Today P/L ${fmtMoney(todayPL,cur)}</div>`:""}
+    ${totalPL!=null?`<div class="mono" style="font-size:14px;font-weight:600;color:${sColor(totalPL)};margin-top:5px;text-align:center">Total P/L ${fmtMoney(totalPL,cur)}</div>`:""}</button>`;
+}
+function tabsHTML(){
+  const tabs=[["overview","Overview"],["advanced","Advanced stats"],["analysis","Analysis"],["dailyBalances","Daily balances"],["tpSl","TP / SL"],["winners","Winners & losers"],["trades","Trades"]];
+  return `<div class="tabs">`+tabs.map(([id,l])=>
+    `<button class="tab ${state.tab===id?"active":""}" onclick="selectTab('${id}')">${l}</button>`).join("")+`</div>`;
+}
+
+/* ---------- ALL-ACCOUNTS OVERVIEW ---------- */
+function overviewHTML(acc){
+  const rows=Object.entries(acc).map(([login,a],i)=>({login,a,i,label:a.info?.label||login,
+    equity:a.info?.equity||0,cur:a.info?.currency||"USD",
+    openPL:(a.positions||[]).reduce((s,p)=>s+(p.profit||0),0)}));
+  const tEq=rows.reduce((s,r)=>s+r.equity,0);
+  const tPr=rows.reduce((s,r)=>s+(r.a.metrics?.profit||0),0);
+  const tDep=rows.reduce((s,r)=>s+(r.a.metrics?.deposits||0),0);
+  const tTr=rows.reduce((s,r)=>s+(r.a.metrics?.trades||0),0);
+  const tWon=rows.reduce((s,r)=>s+(r.a.metrics?.wonTrades||0),0);
+  const tOpen=rows.reduce((s,r)=>s+(r.a.positions?.length||0),0);
+  const fPL=rows.reduce((s,r)=>s+r.openPL,0);
+  const map={};
+  rows.forEach(r=>(r.a.metrics?.dailyGrowth||[]).forEach(g=>{(map[g.date]=map[g.date]||{})[r.label]=g.balance;}));
+  const dates=Object.keys(map).sort(); const last={};
+  const merged=dates.map(d=>{let tot=0;rows.forEach(r=>{if(map[d][r.label]!=null)last[r.label]=map[d][r.label];tot+=last[r.label]||0;});return{date:d,balance:tot};});
+
+  let h=`<div class="bento"><div class="panel"><div class="grid">
+    ${stat("Combined equity",fmtMoney(tEq),"var(--brass)")}
+    ${stat("Closed P/L",fmtMoney(tPr),sColor(tPr))}
+    ${stat("Floating P/L",fmtMoney(fPL),sColor(fPL),tOpen+" open")}
+    ${stat("Portfolio gain",fmtPct(tDep?tPr/tDep*100:null),sColor(tPr),tTr+" trades • "+(tTr?(tWon/tTr*100).toFixed(1):"—")+"% win")}
+  </div></div>`;
+  if(merged.length>1) h+=`<div class="panel chart-wrap"><div class="sect" style="padding-left:8px">Combined balance</div>${lineChart(merged,"#CFA75B",{height:230})}</div>`;
+  h+=`<div class="panel" style="padding:16px"><div class="sect">Accounts</div><div class="tblwrap"><table>
+    <tr><th>Account</th><th>Equity</th><th>Gain</th><th>Abs.</th><th>Profit</th><th>Float</th><th>DD</th><th>PF</th><th>Win %</th><th>Trades</th></tr>`;
+  rows.forEach(r=>{const m=r.a.metrics;
+    h+=`<tr onclick="selectAcct('${esc(r.login)}')" style="cursor:pointer">
+      <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${PALETTE[r.i%PALETTE.length]};margin-right:7px"></span><span class="disp" style="font-weight:600">${esc(r.label)}</span></td>
+      <td class="mono">${fmtMoney(r.equity,r.cur)}</td>
+      <td class="mono" style="color:${sColor(m?.gain)}">${fmtPct(m?.gain)}</td>
+      <td class="mono" style="color:${sColor(m?.absGain)}">${fmtPct(m?.absGain)}</td>
+      <td class="mono" style="color:${sColor(m?.profit)}">${fmtMoney(m?.profit,r.cur)}</td>
+      <td class="mono" style="color:${sColor(r.openPL)}">${fmtNum(r.openPL,0)}</td>
+      <td class="mono" style="color:var(--down)">${fmtPct(m?.maxDrawdown,1)}</td>
+      <td class="mono" style="color:var(--mute)">${fmtNum(m?.profitFactor)}</td>
+      <td class="mono" style="color:var(--mute)">${fmtPct(m?.wonTradesPercent,1)}</td>
+      <td class="mono" style="color:var(--mute)">${m?.trades??"—"}</td></tr>`;});
+  h+=`</table></div></div></div>`;
+  return h;
+}
+
+/* ---------- SINGLE ACCOUNT TABS ---------- */
+function accountTabHTML(login,a,color){
+  const m=a.metrics,info=a.info,cur=info?.currency||"USD";
+  const stale=info?.updatedAt?(Date.now()/1000-info.updatedAt>180):false;
+  let h="";
+  if(stale) h+=`<div class="alert warn">⚠ Terminal offline — last update ${ago(info.updatedAt*1000)}. Showing last known data.</div>`;
+  if(!m) return h+`<div class="panel loading">No history yet — the EA pushes deal history every 10 minutes.</div>`;
+  if(state.tab==="overview") h+=tabOverview(login,a,color,cur);
+  else if(state.tab==="advanced") h+=tabAdvanced(m,cur);
+  else if(state.tab==="analysis") h+=tabAnalysis(m,cur,color,a);
+  else if(state.tab==="dailyBalances") h+=tabDailyBalances(m,cur,a);
+  else if(state.tab==="tpSl") h+=tabTPSL(m,cur,a);
+  else if(state.tab==="winners") h+=tabWinners(m,cur,color,a);
+  else if(state.tab==="trades") h+=tabTrades(m,a,cur);
+  return h;
+}
+
+function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=false){
+  if(showDailyExtremes){
+    const headerStat=(lbl,val,color,sub)=>'<div class="stat" style="padding:0;min-width:145px"><div class="lbl">'+lbl+'</div><div class="val" style="color:'+(color||"var(--text)")+'">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+    const balanceSub=esc(broker||"");
+    const prevEodTime=s.prevDayEODAt!=null?"as of "+dtStr(s.prevDayEODAt):"";
+    const allHighTime=s.highestBalAt!=null?"at "+dtStr(s.highestBalAt):"";
+    const prevHighTime=s.prevDayHighAt!=null?"at "+dtStr(s.prevDayHighAt):"";
+    const prevLowTime=s.prevDayLowAt!=null?"at "+dtStr(s.prevDayLowAt):"";
+    const highTime=s.todayHighAt!=null?"at "+tmStr(s.todayHighAt):"";
+    const lowTime=s.todayLowAt!=null?"at "+tmStr(s.todayLowAt):"";
+    const allLowTime=s.lowestBalAt!=null?"at "+dtStr(s.lowestBalAt):"";
+    const mpdTime=s.mpdAt!=null?"at "+dtStr(s.mpdAt):"";
+    const mldTime=s.mldAt!=null?"at "+dtStr(s.mldAt):"";
+    return '<div style="padding:14px 16px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:18px;overflow-x:auto;white-space:nowrap"><div class="sect" style="margin-bottom:0;flex:0 0 auto">Balances</div><div style="display:flex;gap:24px;align-items:flex-start;flex:0 0 auto">'+
+      headerStat("Balance",fmtMoney(s.balance,cur),null,balanceSub)+
+      headerStat("Prev day EOD",fmtMoney(s.prevDayEOD,cur),null,prevEodTime)+
+      '</div></div><div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">'+
+      stat("ATH",fmtMoney(s.highestBal,cur),"var(--up)",allHighTime)+
+      stat("PDH",fmtMoney(s.prevDayHighBal,cur),"var(--up)",prevHighTime)+
+      stat("TH",fmtMoney(s.todayHighBal,cur),"var(--up)",highTime)+
+      stat("TMP",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime)+
+      stat("ATL",fmtMoney(s.lowestBal,cur),"var(--down)",allLowTime)+
+      stat("PDL",fmtMoney(s.prevDayLowBal,cur),"var(--down)",prevLowTime)+
+      stat("TL",fmtMoney(s.todayLowBal,cur),"var(--down)",lowTime)+
+      stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)+
+      stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap")+
+      stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
+      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"signed MT5 cost")+
+      stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
+      '</div>';
+  }
+  const g3=showSwap?'grid-template-columns:repeat(4,minmax(0,1fr))':'grid-template-columns:repeat(auto-fit,minmax(120px,1fr))';
+  const hiColor=s.todayHighBal!=null&&s.prevDayEOD!=null?(s.todayHighBal-s.prevDayEOD)>=0?"var(--up)":"var(--down)":null;
+  const lowColor=s.todayLowBal!=null&&s.prevDayEOD!=null?(s.todayLowBal-s.prevDayEOD)<=0?"var(--down)":"var(--up)":null;
+  const highTime=s.todayHighAt!=null?`at ${tmStr(s.todayHighAt)}`:"";
+  const lowTime=s.todayLowAt!=null?`at ${tmStr(s.todayLowAt)}`:"";
+  const prevEodTime=s.prevDayEODAt!=null?`as of ${dtStr(s.prevDayEODAt)}`:"";
+  const allHighTime=s.highestBalAt!=null?`at ${dtStr(s.highestBalAt)}`:"";
+  const mpdTime=s.mpdAt!=null?`at ${dtStr(s.mpdAt)}`:"";
+  const mldTime=s.mldAt!=null?`at ${dtStr(s.mldAt)}`:"";
+  return `<div style="padding:14px 16px 0;display:flex;justify-content:space-between;align-items:flex-start"><div class="sect" style="margin-bottom:0">Balances</div>
+    ${showSwap?`<div class="stat" style="padding:0 0 8px;text-align:right"><div class="lbl">Total P/L</div><div class="val" style="color:${sColor(s.totalProfit)}">${fmtMoney(s.totalProfit,cur)}</div></div>`:""}</div>
+    <div class="grid" style="${g3}">
+      ${stat("Balance",fmtMoney(s.balance,cur),null,esc(broker||""))}
+      ${stat("Prev day EOD",fmtMoney(s.prevDayEOD,cur),null,prevEodTime)}
+      ${stat("Day's high",fmtMoney(s.todayHighBal,cur),hiColor,highTime)}
+      ${stat("Day's low",fmtMoney(s.todayLowBal,cur),lowColor,lowTime)}
+      ${stat("All-time high",fmtMoney(s.highestBal,cur),null,allHighTime)}
+      ${showSwap?stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap"):""}
+      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"signed MT5 cost")}
+      ${showSwap?stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost"):""}
+      ${showSwap?"":stat("Total P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))}
+      ${showDailyExtremes?stat("MPD (max day profit)",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime):""}
+      ${showDailyExtremes?stat("MLD (max day loss)",fmtMoney(s.mld,cur),sColor(s.mld),mldTime):""}
+    </div>`;
+}
+function balanceSnapshotPanel(a,cur,showSwap=false){
+  const m=a.metrics,info=a.info;
+  return `<div class="panel sp6">${balanceStatsInner({balance:info?.balance,prevDayEOD:m.prevDayEOD,prevDayEODAt:m.prevDayEODAt,todayHighBal:m.todayHighBal,todayLowBal:m.todayLowBal,todayHighAt:m.todayHighAt,todayLowAt:m.todayLowAt,highestBal:m.highestBal,highestBalAt:m.highestBalAt,grossProfit:m.grossProfit,commission:m.totalCommission,swap:m.totalSwap,totalProfit:m.finalProfit??m.profit},cur,info?.broker,showSwap)}</div>`;
+}
+function overviewBalancePanel(a,cur){
+  const m=a.metrics,info=a.info;
+  const overallFinal=m.finalProfit??m.profit;
+  const day=balanceForDay(m,istDayStartUnix());
+  const headerStat=(lbl,val,color,sub)=>'<div class="stat" style="padding:0;min-width:145px"><div class="lbl">'+lbl+'</div><div class="val" style="color:'+(color||"var(--text)")+'">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
+  return '<div class="panel sp6"><div style="padding:14px 16px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:18px;overflow-x:auto;white-space:nowrap"><div class="sect" style="margin-bottom:0;flex:0 0 auto">Balances</div><div style="display:flex;gap:24px;align-items:flex-start;flex:0 0 auto">'+
+    headerStat("Balance",fmtMoney(info?.balance,cur),null,esc(info?.broker||""))+
+    headerStat("Prev day EOD",fmtMoney(day.prevDayEOD,cur),null,day.prevDayEODAt!=null?"as of "+dtStr(day.prevDayEODAt):"")+
+    '</div></div><div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">'+
+    stat("ATH",fmtMoney(m.highestBal,cur),"var(--up)",m.highestBalAt!=null?"at "+dtStr(m.highestBalAt):"")+
+    stat("PDH",fmtMoney(day.prevDayHighBal,cur),"var(--up)",day.prevDayHighAt!=null?"at "+dtStr(day.prevDayHighAt):"")+
+    stat("TH",fmtMoney(m.todayHighBal,cur),"var(--up)",m.todayHighAt!=null?"at "+tmStr(m.todayHighAt):"")+
+    stat("TMP",fmtMoney(m.mpd,cur),sColor(m.mpd),m.mpdAt!=null?"at "+dtStr(m.mpdAt):"")+
+    stat("ATL",fmtMoney(m.lowestBal,cur),"var(--down)",m.lowestBalAt!=null?"at "+dtStr(m.lowestBalAt):"")+
+    stat("PDL",fmtMoney(day.prevDayLowBal,cur),"var(--down)",day.prevDayLowAt!=null?"at "+dtStr(day.prevDayLowAt):"")+
+    stat("TL",fmtMoney(m.todayLowBal,cur),"var(--down)",m.todayLowAt!=null?"at "+tmStr(m.todayLowAt):"")+
+    stat("TML",fmtMoney(m.mld,cur),sColor(m.mld),m.mldAt!=null?"at "+dtStr(m.mldAt):"")+
+    stat("Profit",fmtMoney(m.grossProfit,cur),sColor(m.grossProfit),"before commission and swap")+
+    stat("Swap",fmtMoney(m.totalSwap,cur),sColor(m.totalSwap),"signed MT5 cost")+
+    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),"signed MT5 cost")+
+    stat("Final P/L",fmtMoney(overallFinal,cur),sColor(overallFinal))+
+    '</div></div>';
+}
+function balanceForDay(m,start){
+  const end=start+86400, prevStart=start-86400, events=m.balanceTimeline||[];
+  let prevDayEOD=0, prevDayStartBal=0, prevDayHighBal=null, prevDayLowBal=null, prevDayHighAt=prevStart, prevDayLowAt=prevStart;
+  let balance=0, todayHighBal=null, todayLowBal=null, todayHighAt=start, todayLowAt=start;
+  let highestBal=null, lowestBal=null, highestBalAt=null, lowestBalAt=null, sawDayEvent=false;
+  for(const e of events){
+    if(e.t<prevStart){
+      prevDayStartBal=e.bal; prevDayEOD=e.bal;
+      if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+      if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+      continue;
+    }
+    if(e.t<start){
+      prevDayEOD=e.bal;
+      if(prevDayHighBal==null){ prevDayHighBal=prevDayStartBal; prevDayLowBal=prevDayStartBal; }
+      if(e.bal>prevDayHighBal){ prevDayHighBal=e.bal; prevDayHighAt=e.t; }
+      if(e.bal<prevDayLowBal){ prevDayLowBal=e.bal; prevDayLowAt=e.t; }
+      if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+      if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+      continue;
+    }
+    if(e.t>=end) break;
+    sawDayEvent=true; balance=e.bal;
+    if(todayHighBal==null){ todayHighBal=prevDayEOD; todayLowBal=prevDayEOD; todayHighAt=start; todayLowAt=start; }
+    if(e.bal>todayHighBal){ todayHighBal=e.bal; todayHighAt=e.t; }
+    if(e.bal<todayLowBal){ todayLowBal=e.bal; todayLowAt=e.t; }
+    if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+    if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+  }
+  if(prevDayHighBal==null){ prevDayHighBal=prevDayStartBal; prevDayLowBal=prevDayStartBal; }
+  if(!sawDayEvent) balance=prevDayEOD;
+  if(todayHighBal==null){ todayHighBal=prevDayEOD; todayHighAt=start; }
+  if(todayLowBal==null){ todayLowBal=prevDayEOD; todayLowAt=start; }
+  if(highestBalAt==null){ highestBal=prevDayEOD; highestBalAt=start; }
+  if(lowestBalAt==null){ lowestBal=prevDayEOD; lowestBalAt=start; }
+  return {balance,prevDayEOD,prevDayEODAt:start,prevDayHighBal,prevDayLowBal,prevDayHighAt,prevDayLowAt,todayHighBal,todayLowBal,todayHighAt,todayLowAt,highestBal,lowestBal,highestBalAt,lowestBalAt};
+}
+function balanceForRange(m,from,to){
+  const events=m.balanceTimeline||[], prevStart=from-86400;
+  let prevDayEOD=0, prevDayStartBal=0, prevDayHighBal=null, prevDayLowBal=null, prevDayHighAt=prevStart, prevDayLowAt=prevStart;
+  let balance=0, todayHighBal=null, todayLowBal=null, todayHighAt=from, todayLowAt=from;
+  let highestBal=null, lowestBal=null, highestBalAt=null, lowestBalAt=null, sawRangeEvent=false;
+  for(const e of events){
+    if(e.t<prevStart){
+      prevDayStartBal=e.bal; prevDayEOD=e.bal;
+      if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+      if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+      continue;
+    }
+    if(e.t<from){
+      prevDayEOD=e.bal;
+      if(prevDayHighBal==null){ prevDayHighBal=prevDayStartBal; prevDayLowBal=prevDayStartBal; }
+      if(e.bal>prevDayHighBal){ prevDayHighBal=e.bal; prevDayHighAt=e.t; }
+      if(e.bal<prevDayLowBal){ prevDayLowBal=e.bal; prevDayLowAt=e.t; }
+      if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+      if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+      continue;
+    }
+    if(to!=null&&e.t>=to) break;
+    sawRangeEvent=true; balance=e.bal;
+    if(todayHighBal==null){ todayHighBal=prevDayEOD; todayLowBal=prevDayEOD; todayHighAt=from; todayLowAt=from; }
+    if(e.bal>todayHighBal){ todayHighBal=e.bal; todayHighAt=e.t; }
+    if(e.bal<todayLowBal){ todayLowBal=e.bal; todayLowAt=e.t; }
+    if(highestBalAt==null||e.bal>highestBal){ highestBal=e.bal; highestBalAt=e.t; }
+    if(lowestBalAt==null||e.bal<lowestBal){ lowestBal=e.bal; lowestBalAt=e.t; }
+  }
+  if(prevDayHighBal==null){ prevDayHighBal=prevDayStartBal; prevDayLowBal=prevDayStartBal; }
+  if(!sawRangeEvent) balance=prevDayEOD;
+  if(todayHighBal==null){ todayHighBal=prevDayEOD; todayHighAt=from; }
+  if(todayLowBal==null){ todayLowBal=prevDayEOD; todayLowAt=from; }
+  if(highestBalAt==null){ highestBal=prevDayEOD; highestBalAt=from; }
+  if(lowestBalAt==null){ lowestBal=prevDayEOD; lowestBalAt=from; }
+  return {balance,prevDayEOD,prevDayEODAt:from,prevDayHighBal,prevDayLowBal,prevDayHighAt,prevDayLowAt,todayHighBal,todayLowBal,todayHighAt,todayLowAt,highestBal,lowestBal,highestBalAt,lowestBalAt};
+}
+function tabOverview(login,a,color,cur){
+  const m=a.metrics,info=a.info;
+  const openPL=(a.positions||[]).reduce((s,p)=>s+(p.profit||0),0);
+  const inlineStat=(label,value,color)=>`<span style="color:var(--mute);font-size:13px;white-space:nowrap">${label} <b class="mono" style="color:${color||"var(--text)"};font-weight:600">${value}</b></span>`;
+  let h='';
+  // Row 1: Balances | Win & loss/session
+  h+=overviewBalancePanel(a,cur);
+  const wlSt=tradeStats(tradesInRange(m,'wl'));
+  h+=`<div class="panel sp6" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center">
+    <div style="display:flex;align-items:center;gap:18px;flex:1;min-width:0;flex-wrap:wrap">
+      <div class="sect" style="margin-bottom:0">Win &amp; loss</div>
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        ${inlineStat("Trades",wlSt.n)}
+        ${inlineStat("Winners",wlSt.W,"var(--up)")}
+        ${inlineStat("Losers",wlSt.L,"var(--down)")}
+        ${inlineStat("Win rate",fmtPct(wlSt.winPct,1),sColor((wlSt.winPct||0)-50))}
+        ${inlineStat("TP",wlSt.tpHits,"var(--up)")}
+        ${inlineStat("SL",wlSt.slHits,"var(--down)")}
+      </div>
+    </div>${rangeControls('wl')}</div>`;
+  // P/L by market session is grouped into the same balance-sized panel.
+  {
+    const ftr=tradesInRange(m,'wl');
+    const smSt=tradeStats(ftr);
+    const mk=()=>({pr:0,n:0,w:0,l:0});
+    const blankSessions=()=>Object.fromEntries(SESSIONS.map(sx=>[sx.id,mk()]));
+    const g={}, sessTot=blankSessions();
+    for(const t of ftr){ if(!t.symbol) continue;
+      const sess=sessionOf(t.openTime??t.closeTime);
+      g[t.symbol]=g[t.symbol]||{...blankSessions(),tot:mk()};
+      const win=t.profit>0?1:0, los=t.profit<0?1:0;
+      g[t.symbol][sess].pr+=t.profit; g[t.symbol][sess].n++; g[t.symbol][sess].w+=win; g[t.symbol][sess].l+=los;
+      g[t.symbol].tot.pr+=t.profit; g[t.symbol].tot.n++; g[t.symbol].tot.w+=win; g[t.symbol].tot.l+=los;
+      sessTot[sess].pr+=t.profit; sessTot[sess].n++; sessTot[sess].w+=win; sessTot[sess].l+=los;
+    }
+    const symsL=Object.keys(g).sort(compareInstruments);
+    if(symsL.length){
+      const cell=c=>c.n?`<div class="mono" style="color:${sColor(c.pr)};font-weight:600">${fmtNum(c.pr,0)}</div><div style="font-size:10px"><span style="color:var(--up)">${c.w||0}W</span><span style="color:var(--dim)">/</span><span style="color:var(--down)">${c.l||0}L</span></div>`:`<span style="color:var(--dim)">·</span>`;
+      h+=`<div style="margin-top:18px"><div class="sect" style="margin-bottom:10px">P/L by market session</div>
+        <div class="tblwrap"><table>
+        <tr><th>Symbol</th>${SESSIONS.map(sx=>`<th>${sx.name}<div style="font-weight:400;text-transform:none;letter-spacing:0">${sx.ist} IST</div></th>`).join("")}<th>Total</th></tr>`;
+      symsL.forEach(sy=>{
+        h+=`<tr><td class="mono" style="color:var(--brass);font-weight:600">${esc(sy)}</td>
+          ${SESSIONS.map(sx=>`<td>${cell(g[sy][sx.id])}</td>`).join("")}
+          <td>${cell(g[sy].tot)}</td></tr>`;});
+      h+=`<tr style="border-top:2px solid var(--line)"><td class="disp" style="font-weight:700">All</td>
+        ${SESSIONS.map(sx=>`<td>${cell(sessTot[sx.id])}</td>`).join("")}
+        <td>${cell({pr:smSt.profit,n:smSt.n,w:smSt.W,l:smSt.L})}</td></tr>`;
+      h+=`</table></div></div>`;
+    } else {
+      h+=`<div style="margin-top:18px"><div class="sect" style="margin-bottom:10px">P/L by market session</div><div style="color:var(--dim);font-size:13px">No trades for this date filter.</div></div>`;
+    }
+  }
+  h+=`</div>`;
+  // Overall instrument splitup follows the combined Win & loss/session panel.
+  const overviewSymbolTrades=tradesInRange(m,'wl');
+  h+=`<div class="panel sp6" style="padding:16px"><div class="sect" style="margin-bottom:10px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows Win &amp; loss date filter</span></div>${symbolStatsTable(overviewSymbolTrades,cur,{showPips:false,interactive:false})}</div>`;
+  // Open positions follows the instrument splitup and uses the same sp6 width.
+  h+=positionsHTML(a,cur,openPL,"sp6");
+  // Hourly view below the session/positions row, split into two 12-hour panels.
+  {
+    const hourTr=tradesInRange(m,'sm');
+    const makeHourCell=()=>({pr:0,n:0,w:0,l:0});
+    const hourG={}, hourTot=Array.from({length:24},makeHourCell), hourSyms=new Set();
+    for(const t of hourTr){
+      if(!t.symbol) continue;
+      const u=t.openTime??t.closeTime; if(u==null) continue;
+      const hr=istHour(u); hourSyms.add(t.symbol);
+      hourG[t.symbol]=hourG[t.symbol]||{hours:Array.from({length:24},makeHourCell),tot:makeHourCell()};
+      const c=hourG[t.symbol].hours[hr], tot=hourG[t.symbol].tot, win=t.profit>0?1:0, los=t.profit<0?1:0;
+      c.pr+=t.profit; c.n++; c.w+=win; c.l+=los; tot.pr+=t.profit; tot.n++; tot.w+=win; tot.l+=los;
+      hourTot[hr].pr+=t.profit; hourTot[hr].n++; hourTot[hr].w+=win; hourTot[hr].l+=los;
+    }
+    const hourList=[...hourSyms].sort(compareInstruments);
+    const hourCell=c=>c.n?`<div class="mono" style="color:${sColor(c.pr)};font-weight:600">${fmtNum(c.pr,0)}</div><div style="font-size:10px"><span style="color:var(--up)">${c.w||0}W</span><span style="color:var(--dim)">/</span><span style="color:var(--down)">${c.l||0}L</span></div>`:`<span style="color:var(--dim)">·</span>`;
+    const hourLabel=hr=>`${String(hr).padStart(2,"0")}:00 ${String((hr+1)%24).padStart(2,"0")}:00`;
+    const hourGrand=hourTot.reduce((x,c)=>({pr:x.pr+c.pr,n:x.n+c.n,w:x.w+c.w,l:x.l+c.l}),makeHourCell());
+    for(let part=0;part<2;part++){
+      const start=part*12, end=start+12;
+      h+=`<div class="panel sp6" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><div class="sect" style="margin-bottom:0">P/L by hour <span style="color:var(--dim);text-transform:none;letter-spacing:0">${time12(start*60)} to ${time12(end*60)} IST</span></div>${part===0?rangeControls('sm'):""}</div>
+        <div class="tblwrap"><table style="table-layout:fixed;min-width:0;font-size:12px">
+        <tr><th style="padding-left:3px;padding-right:3px">Symbol</th>${Array.from({length:12},(_,j)=>`<th style="font-size:10px;padding-left:3px;padding-right:3px;white-space:normal">${hourLabel(start+j)}</th>`).join("")}<th style="padding-left:3px;padding-right:3px">Total</th></tr>`;
+      if(hourList.length){
+        hourList.forEach(sy=>{
+          h+=`<tr><td class="mono" style="color:var(--brass);font-weight:600">${esc(sy)}</td>
+            ${hourG[sy].hours.slice(start,end).map(c=>`<td>${hourCell(c)}</td>`).join("")}
+            <td>${hourCell(hourG[sy].tot)}</td></tr>`;
+        });
+        h+=`<tr style="border-top:2px solid var(--line)"><td class="disp" style="font-weight:700">All</td>
+          ${hourTot.slice(start,end).map(c=>`<td>${hourCell(c)}</td>`).join("")}
+          <td>${hourCell(hourGrand)}</td></tr>`;
+      } else h+=`<tr><td colspan="14" style="color:var(--dim);font-size:13px">No trades for this date filter.</td></tr>`;
+      h+=`</table></div></div>`;
+    }
+  }
+  // Row 4 (last): Periods
+  h+=`<div class="panel" style="padding:16px"><div class="sect">Periods</div><div class="tblwrap"><table>
+    <tr><th></th><th>Gain</th><th>Profit</th><th>Pips</th><th>Win %</th><th>Trades</th><th>Lots</th></tr>`;
+  (m.periods||[]).forEach(p=>{
+    h+=`<tr><td class="disp" style="font-weight:600;color:var(--text)">${p.label}</td>
+      <td class="mono" style="color:${sColor(p.gain)}">${fmtPct(p.gain)}</td>
+      <td class="mono" style="color:${sColor(p.profit)}">${fmtMoney(p.profit,cur)}</td>
+      <td class="mono" style="color:${sColor(p.pips)}">${p.pips!=null?fmtNum(p.pips,1):"—"}</td>
+      <td class="mono" style="color:var(--mute)">${fmtPct(p.win,0)}</td>
+      <td class="mono" style="color:var(--mute)">${p.trades}</td>
+      <td class="mono" style="color:var(--mute)">${fmtNum(p.lots)}</td></tr>`;});
+  h+=`</table></div></div>`;
+  return h;
+}
+function tabAdvanced(m,cur){
+  const tr=analyticTrades(m);
+  const st=tradeStats(tr);
+  let h="";
+  h+=aFilterBar(m);
+  h+=`<div class="panel sp8" style="padding:16px"><div class="sect">Advanced statistics
+      ${state.aSymbol!=="ALL"||state.aPreset!=="ALL"?`<span style="color:var(--brass);text-transform:none;letter-spacing:0">• ${esc(state.aSymbol!=="ALL"?state.aSymbol:"")} ${state.aPreset==="TODAY"?"today":state.aPreset==="YDAY"?"yesterday":state.aPreset==="CUSTOM"?"custom range":""}</span>`:""}
+    </div><div class="kv">
+    ${kvRow("Trades",st.n)}
+    ${kvRow("Profitability",fmtPct(st.winPct,1)+" ("+st.W+"W / "+st.L+"L)",sColor((st.winPct||0)-50))}
+    ${kvRow("Net profit",fmtMoney(st.profit,cur),sColor(st.profit))}
+    ${kvRow("Longs won",st.longs?`${st.longsWon}/${st.longs} (${(st.longsWon/st.longs*100).toFixed(0)}%)`:"—")}
+    ${kvRow("Shorts won",st.shorts?`${st.shortsWon}/${st.shorts} (${(st.shortsWon/st.shorts*100).toFixed(0)}%)`:"—")}
+    ${kvRow("Profit factor",fmtNum(st.pf))}
+    ${kvRow("Expectancy",fmtMoney(st.expectancy,cur),sColor(st.expectancy))}
+    ${kvRow("Average win",fmtMoney(st.avgWin,cur)+(st.avgWinPips!=null?" / "+fmtNum(st.avgWinPips,1)+" pips":""),"var(--up)")}
+    ${kvRow("Average loss","−"+fmtMoney(st.avgLoss,cur)+(st.avgLossPips!=null?" / "+fmtNum(st.avgLossPips,1)+" pips":""),"var(--down)")}
+    ${kvRow("Best trade",fmtMoney(st.best,cur),"var(--up)")}
+    ${kvRow("Worst trade",fmtMoney(st.worst,cur),"var(--down)")}
+    ${kvRow("Pips",st.pips!=null?fmtNum(st.pips,1):"— (needs EA v1.1+)",sColor(st.pips))}
+    ${kvRow("Lots",fmtNum(st.lots))}
+    ${kvRow("Std. deviation",fmtMoney(st.std,cur))}
+    ${kvRow("TP hits",st.tpHits,"var(--up)")}
+    ${kvRow("SL hits",st.slHits,"var(--down)")}
+    ${kvRow("Avg. trade length",durStr(st.avgDur))}
+    ${kvRow("Longest trade",durStr(st.maxDur))}
+  </div></div>`;
+  if(m.ddCurve?.length>1)
+    h+=`<div class="panel chart-wrap"><div class="sect" style="padding-left:8px">Drawdown %</div>${lineChart(m.ddCurve,"var(--down)",{height:170,fmt:v=>v.toFixed(1)+"%",zeroLine:true})}</div>`;
+  return h;
+}
+function lastTradingDates(count=5){
+  const out=[]; let u=istDayStartUnix();
+  while(out.length<count){
+    const dow=new Date((u+DAY_SHIFT)*1000).getUTCDay();
+    if(dow!==0&&dow!==6) out.push({key:dayKey(u),start:u});
+    u-=86400;
+  }
+  return out;
+}
+function analysisDateOptions(){
+  return [["LAST5","Last 5 trading days"],
+    ...lastTradingDates().map(d=>["DATE:"+d.key,d.key]),
+    ["CUSTOM","Custom"],["ALL","All time"]];
+}
+function dailyBalanceMonthOptions(){
+  const months=[...new Set(lastTradingDates(30).map(d=>d.key.slice(0,7)))];
+  return [["ALL","Last 30 trading days"],...months.map(k=>{
+    const [y,mo]=k.split("-");
+    return [k,`${MONTHS[Number(mo)-1]} ${y}`];
+  })];
+}
+function dailyBalancesSection(m,cur,info,dailyFloating={}){
+  const days=lastTradingDates(30).filter(d=>state.balanceMonth==="ALL"||d.key.startsWith(state.balanceMonth));
+  return `<div class="panel" style="padding:16px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+      <div class="sect" style="margin-bottom:10px">Daily balances <span style="color:var(--dim);text-transform:none;letter-spacing:0">• 30 trading days • ${esc(info?.broker||"")} • floating history from EA v1.6</span></div>
+      <select style="max-width:180px;padding:7px 10px;font-size:12px" onchange="setAFilter('balanceMonth',this.value)">
+        ${dailyBalanceMonthOptions().map(([v,l])=>`<option value="${v}" ${state.balanceMonth===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">Floating last = the last EA snapshot before the 02:30 IST rollover. Older days show — until EA v1.6 records them.</div>
+    <div class="tblwrap"><table>
+      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Max floating profit</th><th>Max floating loss</th><th>Floating last</th><th>Max drawdown</th><th>Day's drawdown</th><th>Overall profit</th><th>Day's profit</th></tr>
+      ${days.length?days.map(d=>{
+        const s=balanceForDay(m,d.start);
+        const fl=dailyFloating?.[d.key]||{};
+        const dayProfit=m.dailyProfit?.[d.key]??0;
+        const overallProfit=m.allTrades.filter(t=>t.closeTime!=null&&t.closeTime<d.start+86400).reduce((sum,t)=>sum+t.profit,0);
+        const maxDD=m.dailyMaxDD?.[d.key]??0, maxDDMoney=m.dailyMaxDDMoney?.[d.key]??0;
+        const dayDD=m.dailyDD?.[d.key]??0, dayDDMoney=m.dailyDDMoney?.[d.key]??0;
+        const hiColor=s.todayHighBal!=null&&s.prevDayEOD!=null&&(s.todayHighBal-s.prevDayEOD)>=0?"var(--up)":"var(--down)";
+        const lowColor=s.todayLowBal!=null&&s.prevDayEOD!=null&&(s.todayLowBal-s.prevDayEOD)<=0?"var(--down)":"var(--up)";
+        return `<tr class="mono"><td style="color:var(--brass);font-weight:600">${esc(d.key)}</td>
+          <td style="color:var(--text)">${fmtMoney(s.balance,cur)}</td>
+          <td style="color:var(--mute)"><div>${fmtMoney(s.prevDayEOD,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">as of ${dtStr(s.prevDayEODAt)}</div></td>
+          <td style="color:${hiColor}"><div>${fmtMoney(s.todayHighBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${tmStr(s.todayHighAt)}</div></td>
+          <td style="color:${lowColor}"><div>${fmtMoney(s.todayLowBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${tmStr(s.todayLowAt)}</div></td>
+          <td style="color:var(--text)"><div>${fmtMoney(s.highestBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${dtStr(s.highestBalAt)}</div></td>
+          <td style="color:var(--up)">${fmtMoney(fl.maxProfit,cur)}</td>
+          <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
+          <td style="color:${sColor(fl.last)}">${fmtMoney(fl.last,cur)}</td>
+          <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
+          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td>
+          <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td>
+          <td style="color:${sColor(dayProfit)}">${fmtMoney(dayProfit,cur)}</td></tr>`;
+      }).join(""):`<tr><td colspan="13" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
+    </table></div>
+  </div>`;
+}
+function tabDailyBalances(m,cur,a){
+  return dailyBalancesSection(m,cur,a?.info,a?.dailyFloating);
+}
+function tpSlDateOptions(){
+  return [["TODAY","Today"],["YDAY","Yesterday"],
+    ...lastTradingDates(5).slice(2).map(d=>["DATE:"+d.key,d.key]),
+    ["CUSTOM","Custom"]];
+}
+function tpSlWindow(){
+  const t0=istDayStartUnix();
+  if(state.tpPreset==="TODAY") return {from:t0,to:t0+86400};
+  if(state.tpPreset==="YDAY") return {from:t0-86400,to:t0};
+  if(state.tpPreset?.startsWith("DATE:")){
+    const from=dateStrToUnix(state.tpPreset.slice(5));
+    return {from,to:from==null?null:from+86400};
+  }
+  if(state.tpPreset==="CUSTOM"){
+    const from=dateStrToUnix(state.tpFrom), end=dateStrToUnix(state.tpTo);
+    return {from,to:end==null?null:end+86400,empty:from==null&&end==null};
+  }
+  return {from:null,to:null};
+}
+function tpSlRows(m,a){
+  if(state.tpPreset==="CUSTOM"&&!state.tpFrom&&!state.tpTo) return [];
+  const {from,to}=tpSlWindow();
+  let rows=Object.values(a?.tpSlHistory||{}).filter(r=>r&&typeof r==="object");
+  if(state.tpSymbol!=="ALL") rows=rows.filter(r=>r.symbol===state.tpSymbol);
+  if(from!=null||to!=null){
+    const inRange=u=>u!=null&&(from==null||u>=from)&&(to==null||u<to);
+    // Match the dashboard's trading-day convention: opened today OR closed today.
+    rows=rows.filter(r=>inRange(r.openTime)||inRange(r.closeTime));
+  }
+  return rows.sort((a,b)=>(b.openTime??b.closeTime??0)-(a.openTime??a.closeTime??0));
+}
+function tpSlSide(r){
+  if(r.side==="BUY"||r.side==="SELL") return r.side;
+  if(r.tp&&r.entry&&r.tp!==r.entry) return r.tp>r.entry?"BUY":"SELL";
+  if(r.sl&&r.entry&&r.sl!==r.entry) return r.sl<r.entry?"BUY":"SELL";
+  return "BUY";
+}
+function tpSlMovement(r){
+  const ps=pipSize(r.symbol), entry=Number(r.entry);
+  const best=Number(r.bestPrice), worst=Number(r.worstPrice);
+  if(!isFinite(entry)||!isFinite(best)||!isFinite(worst)) return {tpm:null,slm:null};
+  const buy=tpSlSide(r)==="BUY";
+  return {tpm:Math.max(0,(buy?best-entry:entry-best)/ps),slm:Math.max(0,(buy?entry-worst:worst-entry)/ps)};
+}
+function isTemporaryTpSlHit(r){
+  return r?.temporary===true||r?.temporary===1||r?.temporary==="true"||r?.hitType==="TEMP_TP"||r?.hitType==="TEMP_SL";
+}
+function tabTPSL(m,cur,a){
+  const rawRows=Object.values(a?.tpSlHistory||{}).filter(r=>r&&typeof r==="object");
+  const syms=[...new Set([...INSTRUMENT_ORDER,...m.allTrades.map(t=>t.symbol),...rawRows.map(r=>r.symbol)].filter(Boolean))].sort(compareInstruments);
+  const rows=tpSlRows(m,a);
+  const tp=rows.filter(r=>r.result==="TP").length, sl=rows.filter(r=>r.result==="SL").length;
+  const manual=rows.length-tp-sl, profit=rows.reduce((s,r)=>s+(Number(r.profit)||0),0);
+  let h=`<div class="panel" style="padding:16px">
+    <div style="display:flex;gap:10px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px">
+      <div class="sect" style="margin-bottom:0;flex:0 0 auto">TP / SL analysis <span style="color:var(--dim);text-transform:none;letter-spacing:0">• initial intended levels</span></div>
+      <span style="font-size:12px;color:var(--dim);margin-left:auto">Instrument</span>
+      <select style="max-width:170px;padding:7px 10px;font-size:12px;flex:0 0 auto" onchange="setAFilter('tpSymbol',this.value)">
+        <option value="ALL" ${state.tpSymbol==="ALL"?"selected":""}>All instruments</option>
+        ${syms.map(sy=>`<option value="${esc(sy)}" ${state.tpSymbol===sy?"selected":""}>${esc(sy)}</option>`).join("")}
+      </select>
+      <span style="font-size:12px;color:var(--dim);margin-left:2px">Date</span>
+      <select style="max-width:190px;padding:7px 10px;font-size:12px;flex:0 0 auto" onchange="setAFilter('tpPreset',this.value)">
+        ${tpSlDateOptions().map(([v,l])=>`<option value="${v}" ${state.tpPreset===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+      ${state.tpPreset==="CUSTOM"?`
+        <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px;flex:0 0 auto" value="${esc(state.tpFrom)}" onchange="setAFilter('tpFrom',this.value)">
+        <span style="font-size:12px;color:var(--dim)">to</span>
+        <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px;flex:0 0 auto" value="${esc(state.tpTo)}" onchange="setAFilter('tpTo',this.value)">` : ""}
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin:10px 0 12px">TPM = maximum favorable movement • SLM = maximum adverse movement • values are pips • yellow rows = temporary TP/SL hit only • date filter counts orders opened or closed in the trading day</div>
+    <div class="grid" style="margin:-2px 0 10px">
+      ${stat("Orders",rows.length,null,"TP/SL history")}
+      ${stat("TP hits",tp,"var(--up)")}
+      ${stat("SL hits",sl,"var(--down)")}
+      ${stat("Manual / other",manual,"var(--mute)")}
+      ${stat("Profit / Loss",fmtMoney(profit,cur),sColor(profit))}
+    </div>
+    <div class="tblwrap"><table>
+      <tr><th>Date &amp; Time</th><th>Instrument</th><th>Lot size</th><th>Entry Price</th><th>TP</th><th>SL</th><th>TPM</th><th>SLM</th><th>Result</th><th>Profit/Loss (USD$)</th></tr>`;
+  if(!rows.length){
+    h+=`<tr><td colspan="10" style="color:var(--dim);font-size:13px">No TP/SL history yet — compile and attach EA v1.7, then allow the next history upload.</td></tr>`;
+  } else rows.forEach(r=>{
+    const mv=tpSlMovement(r);
+    const result=r.result==="TP"?"TP hit":r.result==="SL"?"SL hit":(r.result||"Manual");
+    const resultColor=r.result==="TP"?"var(--up)":r.result==="SL"?"var(--down)":"var(--mute)";
+    const dt=r.openTime!=null?dtStr(r.openTime):dtStr(r.closeTime);
+    h+=`<tr class="mono" style="${isTemporaryTpSlHit(r)?"background:#FFF3B0;":""}">
+      <td style="color:var(--mute)">${dt}</td>
+      <td style="color:var(--text);font-weight:600">${esc(r.symbol||"—")}</td>
+      <td style="color:var(--mute)">${fmtNum(r.volume)}</td>
+      <td style="color:var(--text)">${fmtNum(r.entry,5)}</td>
+      <td style="color:var(--up)">${r.tp?fmtNum(r.tp,5):"—"}</td>
+      <td style="color:var(--down)">${r.sl?fmtNum(r.sl,5):"—"}</td>
+      <td style="color:var(--up)">${mv.tpm!=null?fmtNum(mv.tpm,1):"—"}</td>
+      <td style="color:var(--down)">${mv.slm!=null?fmtNum(mv.slm,1):"—"}</td>
+      <td style="color:${resultColor};font-weight:600">${esc(result)}</td>
+      <td style="color:${sColor(r.profit)}">${fmtMoney(r.profit,cur)}</td></tr>`;
+  });
+  return h+`</table></div></div>`;
+}
+function analysisScopeLabel(){
+  if(state.anPreset==="LAST5") return "last 5 trading days by default";
+  if(state.anPreset.startsWith("DATE:")) return state.anPreset.slice(5);
+  if(state.anPreset==="CUSTOM") return "custom date range";
+  return "all time";
+}
+function analysisFilterControls(m){
+  const syms=[...new Set(m.allTrades.map(t=>t.symbol).filter(Boolean))].sort(compareInstruments);
+  return `<div style="display:flex;gap:8px;flex-wrap:nowrap;align-items:center;white-space:nowrap;flex:0 0 auto">
+      <span style="font-size:12px;color:var(--dim)">Instrument</span>
+      <select style="max-width:170px" onchange="setAFilter('anSymbol',this.value)">
+        <option value="ALL" ${state.anSymbol==="ALL"?"selected":""}>All instruments</option>
+        ${syms.map(sy=>`<option value="${esc(sy)}" ${state.anSymbol===sy?"selected":""}>${esc(sy)}</option>`).join("")}
+      </select>
+      <span style="font-size:12px;color:var(--dim);margin-left:4px">Date</span>
+      <select style="max-width:180px" onchange="setAFilter('anPreset',this.value)">
+        ${analysisDateOptions().map(([v,l])=>
+          `<option value="${v}" ${state.anPreset===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+      ${state.anPreset==="CUSTOM"?`
+        <input type="date" style="max-width:145px" value="${esc(state.anFrom)}" onchange="setAFilter('anFrom',this.value)">
+        <span style="color:var(--dim);font-size:12px">to</span>
+        <input type="date" style="max-width:145px" value="${esc(state.anTo)}" onchange="setAFilter('anTo',this.value)">`:""}
+  </div>`;
+}
+function analysisTradesForWindow(m,from,to){
+  let tr=m.allTrades.slice().sort((a,b)=>(a.closeTime??0)-(b.closeTime??0));
+  if(state.anSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.anSymbol);
+  if(from!=null||to!=null){
+    const inRange=u=>u!=null&&(from==null||u>=from)&&(to==null||u<to);
+    tr=tr.filter(t=>inRange(t.closeTime)||inRange(t.openTime));
+  }
+  return tr;
+}
+function analysisWindow(){
+  const t0=istDayStartUnix();
+  let from=null,to=null;
+  if(state.anPreset==="LAST5"){ from=t0-4*86400; to=t0+86400; }
+  else if(state.anPreset==="TODAY"){ from=t0; to=t0+86400; }
+  else if(state.anPreset==="YDAY"){ from=t0-86400; to=t0; }
+  else if(state.anPreset.startsWith("DATE:")){ from=dateStrToUnix(state.anPreset.slice(5)); to=from+86400; }
+  else if(state.anPreset==="CUSTOM"){ from=dateStrToUnix(state.anFrom); const end=dateStrToUnix(state.anTo); to=end==null?null:end+86400; }
+  return {from,to};
+}
+function analysisTrades(m){
+  const {from,to}=analysisWindow();
+  return analysisTradesForWindow(m,from,to);
+}
+function analysisOpenTimeTrades(m){
+  const {from,to}=analysisWindow();
+  let tr=m.allTrades.slice().sort((a,b)=>(a.closeTime??0)-(b.closeTime??0));
+  if(state.anSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.anSymbol);
+  if(from!=null||to!=null){
+    tr=tr.filter(t=>t.openTime!=null&&(from==null||t.openTime>=from)&&(to==null||t.openTime<to));
+  }
+  return tr;
+}
+function customRangeControls(){
+  return `<div style="display:flex;gap:6px;align-items:center;white-space:nowrap">
+    <span style="font-size:12px;color:var(--dim)">From</span>
+    <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.customFrom)}" onchange="setAFilter('customFrom',this.value)">
+    <span style="font-size:12px;color:var(--dim)">to</span>
+    <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.customTo)}" onchange="setAFilter('customTo',this.value)">
+  </div>`;
+}
+function customRangeWindow(){
+  const from=dateStrToUnix(state.customFrom), end=dateStrToUnix(state.customTo);
+  return {from,to:end==null?null:end+86400};
+}
+function customRangeTrades(m){
+  const {from,to}=customRangeWindow();
+  if(from==null&&to==null) return [];
+  return analysisTradesForWindow(m,from,to);
+}
+function customRangeScopeLabel(){
+  if(state.customFrom&&state.customTo) return `${state.customFrom} to ${state.customTo}`;
+  if(state.customFrom) return `from ${state.customFrom}`;
+  if(state.customTo) return `through ${state.customTo}`;
+  return "choose dates";
+}
+function symbolStatsTable(tr,cur,{showPips=true,interactive=true}={}){
+  const g={};
+  for(const t of tr){ if(!t.symbol)continue;
+    g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false,longs:0,shorts:0};
+    const e=g[t.symbol]; e.n++; if(t.profit>0)e.w++;
+    e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.commission+=t.commission||0; e.pr+=t.profit;
+    if(t.dir==="BUY")e.longs++;else e.shorts++; }
+  const list=Object.values(g).sort(compareInstruments);
+  const columnCount=showPips?10:9;
+  let h=`<div class="tblwrap"><table>
+    <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Long/Short</th><th>Won</th><th>Lots</th>${showPips?"<th>Pips</th>":""}<th>Profit</th><th>Commission</th><th>Final P/L</th></tr>`;
+  if(!list.length) return h+`<tr><td colspan="${columnCount}" style="color:var(--dim);font-size:13px">No trades for this date.</td></tr></table></div>`;
+  list.forEach(sy=>{
+    const active=interactive&&state.anSymbol===sy.sym;
+    const rowAttrs=interactive?` onclick="setAFilter('anSymbol','${esc(sy.sym)}')" style="cursor:pointer;${active?"background:#F1F5FF":""}"`:"";
+    h+=`<tr class="mono"${rowAttrs}>
+      <td style="color:var(--brass);font-weight:600">${esc(sy.sym)}</td>
+      <td style="color:var(--mute)">${sy.n}</td>
+      <td><span style="color:var(--up)">${sy.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${sy.n-sy.w}</span></td>
+      <td style="color:var(--mute)">${sy.longs}/${sy.shorts}</td>
+      <td style="color:var(--mute)">${sy.n?(sy.w/sy.n*100).toFixed(0):0}%</td>
+      <td style="color:var(--mute)">${fmtNum(sy.lots)}</td>
+      ${showPips?`<td style="color:${sColor(sy.pips)}">${sy.hasPips?fmtNum(sy.pips,1):"—"}</td>`:""}
+      <td style="color:${sColor(sy.gross)}">${fmtMoney(sy.gross,cur)}</td>
+      <td style="color:${sColor(sy.commission)}">${fmtMoney(sy.commission,cur)}</td>
+      <td style="color:${sColor(sy.pr)}">${fmtMoney(sy.pr,cur)}</td></tr>`;});
+  const total=list.reduce((x,sy)=>({
+    n:x.n+sy.n,w:x.w+sy.w,lots:x.lots+sy.lots,pips:x.pips+sy.pips,gross:x.gross+sy.gross,commission:x.commission+sy.commission,pr:x.pr+sy.pr,
+    hasPips:x.hasPips||sy.hasPips,longs:x.longs+sy.longs,shorts:x.shorts+sy.shorts
+  }),{n:0,w:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false,longs:0,shorts:0});
+  h+=`<tr class="mono" style="border-top:2px solid var(--line);font-weight:700;background:#F7F9FE">
+    <td style="color:var(--text)">Total</td>
+    <td style="color:var(--text)">${total.n}</td>
+    <td><span style="color:var(--up)">${total.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${total.n-total.w}</span></td>
+    <td style="color:var(--text)">${total.longs}/${total.shorts}</td>
+    <td style="color:var(--text)">${total.n?(total.w/total.n*100).toFixed(0):0}%</td>
+    <td style="color:var(--text)">${fmtNum(total.lots)}</td>
+    ${showPips?`<td style="color:${sColor(total.pips)}">${total.hasPips?fmtNum(total.pips,1):"—"}</td>`:""}
+    <td style="color:${sColor(total.gross)}">${fmtMoney(total.gross,cur)}</td>
+    <td style="color:${sColor(total.commission)}">${fmtMoney(total.commission,cur)}</td>
+    <td style="color:${sColor(total.pr)}">${fmtMoney(total.pr,cur)}</td></tr>`;
+  return h+`</table></div>`;
+}
+function symbolDailyProfitLossTable(tr,cur){
+  const g={};
+  for(const t of tr){
+    if(!t.symbol) continue;
+    g[t.symbol]=g[t.symbol]||{sym:t.symbol,trades:0,wins:0,profit:0,loss:0};
+    const e=g[t.symbol];
+    e.trades++; if(t.profit>0)e.wins++;
+    if(t.profit>0) e.profit+=t.profit;
+    else if(t.profit<0) e.loss+=t.profit;
+  }
+  const list=Object.values(g).sort((a,b)=>compareInstruments(a.sym,b.sym));
+  let h=`<div class="tblwrap"><table>
+    <tr><th>Symbol</th><th>Win rate</th><th>Day's total profit</th><th>Day's total loss</th><th>Final P/L</th></tr>`;
+  if(!list.length) return h+`<tr><td colspan="5" style="color:var(--dim);font-size:13px">No trades for this date.</td></tr></table></div>`;
+  list.forEach(sy=>{
+    h+=`<tr class="mono">
+      <td style="color:var(--brass);font-weight:600">${esc(sy.sym)}</td>
+      <td style="color:var(--text)">${sy.trades?(sy.wins/sy.trades*100).toFixed(0):0}%</td>
+      <td style="color:${sColor(sy.profit)}">${fmtMoney(sy.profit,cur)}</td>
+      <td style="color:${sColor(sy.loss)}">${fmtMoney(sy.loss,cur)}</td>
+      <td style="color:${sColor(sy.profit+sy.loss)}">${fmtMoney(sy.profit+sy.loss,cur)}</td></tr>`;
+  });
+  const totalTrades=list.reduce((sum,sy)=>sum+sy.trades,0);
+  const totalWins=list.reduce((sum,sy)=>sum+sy.wins,0);
+  const totalProfit=list.reduce((sum,sy)=>sum+sy.profit,0);
+  const totalLoss=list.reduce((sum,sy)=>sum+sy.loss,0);
+  h+=`<tr class="mono" style="border-top:2px solid var(--line);font-weight:700;background:#F7F9FE">
+    <td style="color:var(--text)">Total</td>
+    <td style="color:var(--text)">${totalTrades?(totalWins/totalTrades*100).toFixed(0):0}%</td>
+    <td style="color:${sColor(totalProfit)}">${fmtMoney(totalProfit,cur)}</td>
+    <td style="color:${sColor(totalLoss)}">${fmtMoney(totalLoss,cur)}</td>
+    <td style="color:${sColor(totalProfit+totalLoss)}">${fmtMoney(totalProfit+totalLoss,cur)}</td></tr>`;
+  return h+`</table></div>`;
+}
+function symbolStatsPanel(tr,cur,title,sub,headExtra=""){
+  return `<div class="panel sp6" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div class="sect" style="margin-bottom:10px">${title} <span style="color:var(--dim);text-transform:none;letter-spacing:0">${sub||""}</span></div>${headExtra}</div>${symbolStatsTable(tr,cur)}</div>`;
+}
+function streakStatsInner(st,cur){
+  return `<div style="margin-top:14px"><div class="sect" style="margin-bottom:8px">Streaks</div>
+    <div class="grid">
+      ${stat("Max consecutive wins",st.maxW.count||0,"var(--up)","continuous profit")}
+      ${stat("Streak profit",st.maxW.count?fmtMoney(st.maxW.amount,cur):"—","var(--up)","total during that run")}
+      ${stat("Max consecutive losses",st.maxL.count||0,"var(--down)","continuous loss")}
+      ${stat("Streak loss",st.maxL.count?fmtMoney(st.maxL.amount,cur):"—","var(--down)","total during that run")}
+    </div></div>`;
+}
+function overallAnalysisSection(m,cur,info,tr){
+  const day=balanceForDay(m,istDayStartUnix());
+  const s={...day,balance:info?.balance,highestBal:m.highestBal,lowestBal:m.lowestBal,highestBalAt:m.highestBalAt,lowestBalAt:m.lowestBalAt,mpd:m.mpd,mld:m.mld,mpdAt:m.mpdAt,mldAt:m.mldAt,grossProfit:m.grossProfit,commission:m.totalCommission,swap:m.totalSwap,totalProfit:m.finalProfit??m.profit};
+  return `<div class="panel sp6" style="padding:16px">
+    ${balanceStatsInner(s,cur,info?.broker,true,true)}
+    <div class="sect" style="margin:14px 0 8px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• ${analysisScopeLabel()} • follows filters • tap to focus</span></div>
+    ${symbolDailyProfitLossTable(tr,cur)}
+  </div>`;
+}
+function customAnalysisSection(m,cur,info){
+  const {from,to}=customRangeWindow();
+  const tr=customRangeTrades(m);
+  const ext=from!=null?realizedDayExtremes(tr,from,to):{mpd:null,mld:null,mpdAt:null,mldAt:null};
+  const s=from!=null?{...balanceForRange(m,from,to),...ext,grossProfit:tr.reduce((sum,t)=>sum+(t.rawProfit||0),0),commission:tr.reduce((sum,t)=>sum+(t.commission||0),0),swap:tr.reduce((sum,t)=>sum+(t.swap||0),0),totalProfit:tr.reduce((sum,t)=>sum+t.profit,0)}:{balance:null,prevDayEOD:null,todayHighBal:null,todayLowBal:null,highestBal:null,mpd:null,mld:null,mpdAt:null,mldAt:null,grossProfit:null,commission:null,swap:null,totalProfit:null};
+  return `<div class="panel sp6" style="padding:16px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div class="sect" style="margin-bottom:10px">Custom range <span style="color:var(--dim);text-transform:none;letter-spacing:0">• ${customRangeScopeLabel()} • follows instrument filter</span></div>${customRangeControls()}</div>
+    ${balanceStatsInner(s,cur,info?.broker,true,true)}
+    ${streakStatsInner(tradeStats(tr),cur)}
+    <div class="sect" style="margin:14px 0 8px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• custom range instrument split</span></div>
+    ${symbolDailyProfitLossTable(tr,cur)}
+  </div>`;
+}
+function dailyAnalysisSection(m,cur,info,d){
+  const tr=analysisTradesForWindow(m,d.start,d.start+86400);
+  const s={...balanceForDay(m,d.start),...realizedDayExtremes(tr,d.start,d.start+86400),grossProfit:tr.reduce((sum,t)=>sum+(t.rawProfit||0),0),commission:tr.reduce((sum,t)=>sum+(t.commission||0),0),swap:tr.reduce((sum,t)=>sum+(t.swap||0),0),totalProfit:tr.reduce((sum,t)=>sum+t.profit,0)};
+  return `<div class="panel sp6" style="padding:16px">
+    <div class="sect">${esc(d.key)} <span style="color:var(--dim);text-transform:none;letter-spacing:0">• daily balance and instrument split</span></div>
+    ${balanceStatsInner(s,cur,info?.broker,true,true)}
+    ${streakStatsInner(tradeStats(tr),cur)}
+    <div class="sect" style="margin:14px 0 8px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows instrument filter</span></div>
+    ${symbolDailyProfitLossTable(tr,cur)}
+  </div>`;
+}
+function tabWinners(m,cur,color,a){
+  const tr=analysisOpenTimeTrades(m);
+  const d=distFor(tr,a?.serverOffset??10800,15);
+  const large=state.anLarge;
+  const legend=`<div class="legend"><span><span class="sw" style="background:var(--up)"></span>winners</span><span><span class="sw" style="background:var(--down)"></span>losers</span></div>`;
+  let h=balanceSnapshotPanel(a,cur);
+  h+=`<div class="panel chart-wrap"><div style="display:flex;gap:10px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px"><div class="sect" style="padding-left:8px;margin-bottom:0;flex:0 0 auto">Winners &amp; losers — 15-minute open-time view, IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">(UTC = IST − 5:30)</span></div>${analysisFilterControls(m)}<button class="btn ghost" style="padding:7px 11px;font-size:12px;flex:0 0 auto" onclick="toggleAnalysisZoom()">${large?"Normal view":"Large view"}</button></div>
+    <div style="font-size:12px;color:var(--dim);margin:8px 0 0 8px">P = net P/L for the 15-minute slot • O = running total • each full-width section is 3 hours with 12 bars • rollover 02:30 IST</div>
+    ${quarterHourSectionsChart(d.hourWL,large)}${legend}</div>`;
+  return h;
+}
+function tabAnalysis(m,cur,color,a){
+  const tr=analysisTrades(m);
+  const barTr=analysisOpenTimeTrades(m);
+  const d=distFor(barTr,a?.serverOffset??10800);
+  const large=state.anLarge;
+  const legend=`<div class="legend"><span><span class="sw" style="background:var(--up)"></span>winners</span><span><span class="sw" style="background:var(--down)"></span>losers</span></div>`;
+  let h="";
+  // Keep the overall last-5-day panel first, then put Today beside it in the grid.
+  h+=overallAnalysisSection(m,cur,a?.info,tr);
+  const analysisDays=lastTradingDates();
+  analysisDays.forEach(d=>{
+    h+=dailyAnalysisSection(m,cur,a?.info,d);
+  });
+  // Custom range follows all date-wise sections so it does not displace Today.
+  h+=customAnalysisSection(m,cur,a?.info);
+  h+=`<div class="panel chart-wrap"><div style="display:flex;gap:10px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px"><div class="sect" style="padding-left:8px;margin-bottom:0;flex:0 0 auto">Winners vs losers — by open time, IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">(UTC = IST − 5:30)</span></div>${analysisFilterControls(m)}<button class="btn ghost" style="padding:7px 11px;font-size:12px;flex:0 0 auto" onclick="toggleAnalysisZoom()">${large?"Normal view":"Large view"}</button></div>
+    <div style="font-size:12px;color:var(--dim);margin:8px 0 0 8px">MT5 server time normalized to UTC • six 4-hour sections with 8 half-hour bars • P = slot net P/L, O = running total • rollover 02:30 IST</div>
+    ${halfHourSectionsChart(d.hourWL,large)}${legend}</div>`;
+  h+=`<div class="panel chart-wrap"><div style="display:flex;gap:10px;align-items:center;overflow-x:auto;white-space:nowrap;padding-bottom:2px"><div class="sect" style="padding-left:8px;margin-bottom:0;flex:0 0 auto">Winners vs losers — by trade duration <span style="color:var(--dim);text-transform:none;letter-spacing:0">• scalp detail: 1m / 2m / 3m</span></div>${analysisFilterControls(m)}<button class="btn ghost" style="padding:7px 11px;font-size:12px;flex:0 0 auto" onclick="toggleAnalysisZoom()">${large?"Normal view":"Large view"}</button></div>
+    <div style="font-size:12px;color:var(--dim);margin:8px 0 0 8px">MT5 server time normalized to UTC • bars use trade open date • rollover 02:30 IST</div>
+    ${stackedChart(d.durBuckets,{height:large?360:260})}${legend}</div>`;
+  return h;
+}
+function tabTrades(m,a,cur){
+  const posHtml=positionsHTML(a,cur,(a.positions||[]).reduce((s,p)=>s+(p.profit||0),0));
+  let h="";
+  const syms=[...new Set(m.allTrades.map(t=>t.symbol).filter(Boolean))].sort(compareInstruments);
+  const hasExit=m.allTrades.some(t=>t.exit!=="Manual");
+  // ---- filter bar ----
+  const trAll=filteredTrades(m,{ignoreSymbol:true}); // exit+date applied, all instruments visible
+  h+=`<div class="panel" style="padding:14px 16px">
+    <div class="sect" style="margin-bottom:8px">Filters</div>
+    <div style="display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;white-space:nowrap;align-items:center">
+      <select style="max-width:150px" onchange="setFilter('fExit',this.value)">
+        ${[["ALL","All exits"],["TP","TP hit"],["SL","SL hit"],["Manual","Manual/other"]].map(([v,l])=>
+          `<option value="${v}" ${state.fExit===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+      <span style="font-size:12px;color:var(--dim);align-self:center">Date</span>
+      <select style="max-width:160px" onchange="setFilter('fDays',this.value)">
+        ${[["0","All time"],["TD","Today"],["YD","Yesterday"],["7","Last 7 days"],["30","Last 30 days"],["90","Last 90 days"],["CUSTOM","Custom"]].map(([v,l])=>
+          `<option value="${v}" ${String(state.fDays)===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+      ${state.fDays==="CUSTOM"?`
+        <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.fFrom)}" onchange="setFilter('fFrom',this.value)">
+        <span style="font-size:12px;color:var(--dim);align-self:center">to</span>
+        <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.fTo)}" onchange="setFilter('fTo',this.value)">`:""}
+      ${(()=>{
+        const cms=[...new Set(m.allTrades.map(t=>t.comment||"(none)"))].sort();
+        if(cms.length<2||cms.length>40) return "";
+        return `<select style="max-width:190px" onchange="setFilter('fComment',this.value)">
+          <option value="ALL" ${state.fComment==="ALL"?"selected":""}>All comments</option>
+          ${cms.map(c=>`<option value="${esc(c)}" ${state.fComment===c?"selected":""}>${esc(c)}</option>`).join("")}
+        </select>`;
+      })()}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="tab ${state.fSymbol==="ALL"?"active":""}" onclick="setFilter('fSymbol','ALL')">All <span style="opacity:.75">(${trAll.length})</span></button>
+      ${syms.map(sy=>{
+        const n=trAll.filter(t=>t.symbol===sy).length;
+        return `<button class="tab ${state.fSymbol===sy?"active":""}" onclick="setFilter('fSymbol','${esc(sy)}')">${esc(sy)} <span style="opacity:.75">(${n})</span></button>`;
+      }).join("")}
+    </div>
+    ${!hasExit?`<div style="font-size:12px;color:var(--dim);margin-top:10px">SL/TP exit data appears after updating the EA to v1.2 (history re-uploads within 10 min).</div>`:""}
+  </div>`;
+  // ---- all instruments at once (respects exit + date filters) ----
+  {
+    const g={};
+    for(const t of trAll){ if(!t.symbol) continue;
+      g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,l:0,tp:0,sl:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false};
+      const e=g[t.symbol]; e.n++; if(t.profit>0)e.w++; else if(t.profit<0)e.l++;
+      if(t.exit==="TP")e.tp++; if(t.exit==="SL")e.sl++;
+      e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.commission+=t.commission||0; e.pr+=t.profit; }
+    const list=Object.values(g).sort(compareInstruments);
+    if(list.length){
+      const total=list.reduce((a,e)=>({
+        n:a.n+e.n,w:a.w+e.w,l:a.l+e.l,tp:a.tp+e.tp,sl:a.sl+e.sl,
+        lots:a.lots+e.lots,gross:a.gross+e.gross,commission:a.commission+e.commission,
+        pr:a.pr+e.pr
+      }),{n:0,w:0,l:0,tp:0,sl:0,lots:0,gross:0,commission:0,pr:0});
+      h+=`<div class="panel" style="padding:16px"><div class="sect">All instruments <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows exit &amp; date filters • tap to focus</span></div>
+        <div class="tblwrap"><table>
+        <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Win %</th><th>TP / SL</th><th>Lots</th><th>Profit</th><th>Commission</th><th>Final P/L</th></tr>`;
+      list.forEach(e=>{
+        const active=state.fSymbol===e.sym;
+        h+=`<tr onclick="setFilter('fSymbol','${esc(e.sym)}')" style="cursor:pointer;${active?"background:#F1F5FF":""}">
+          <td class="mono" style="color:var(--brass);font-weight:600">${esc(e.sym)}</td>
+          <td class="mono" style="color:var(--mute)">${e.n}</td>
+          <td class="mono"><span style="color:var(--up)">${e.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${e.l}</span></td>
+          <td class="mono" style="color:var(--mute)">${e.n?(e.w/e.n*100).toFixed(0):0}%</td>
+          <td class="mono" style="color:var(--mute)">${hasExit?e.tp+" / "+e.sl:"—"}</td>
+          <td class="mono" style="color:var(--mute)">${fmtNum(e.lots)}</td>
+          <td class="mono" style="color:${sColor(e.gross)}">${fmtMoney(e.gross,cur)}</td>
+          <td class="mono" style="color:${sColor(e.commission)}">${fmtMoney(e.commission,cur)}</td>
+          <td class="mono" style="color:${sColor(e.pr)}">${fmtMoney(e.pr,cur)}</td></tr>`;});
+      h+=`<tr style="border-top:2px solid var(--line);background:var(--panel-up);font-weight:700">
+        <td class="mono" style="color:var(--text)">Total</td>
+        <td class="mono" style="color:var(--text)">${total.n}</td>
+        <td class="mono"><span style="color:var(--up)">${total.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${total.l}</span></td>
+        <td class="mono" style="color:var(--text)">${total.n?(total.w/total.n*100).toFixed(0):0}%</td>
+        <td class="mono" style="color:var(--text)">${hasExit?total.tp+" / "+total.sl:"—"}</td>
+        <td class="mono" style="color:var(--text)">${fmtNum(total.lots)}</td>
+        <td class="mono" style="color:${sColor(total.gross)}">${fmtMoney(total.gross,cur)}</td>
+        <td class="mono" style="color:${sColor(total.commission)}">${fmtMoney(total.commission,cur)}</td>
+        <td class="mono" style="color:${sColor(total.pr)}">${fmtMoney(total.pr,cur)}</td></tr>`;
+      h+=`</table></div></div>`;
+    }
+  }
+  // ---- filtered summary ----
+  const tr=filteredTrades(m);
+  const W=tr.filter(t=>t.profit>0).length, L=tr.filter(t=>t.profit<0).length;
+  const pr=tr.reduce((sm,t)=>sm+t.profit,0);
+  const pp=tr.some(t=>t.pips!=null)?tr.reduce((sm,t)=>sm+(t.pips||0),0):null;
+  const lots=tr.reduce((sm,t)=>sm+(t.volume||0),0);
+  const commission=tr.reduce((sm,t)=>sm+(t.commission||0),0);
+  const sl=tr.filter(t=>t.exit==="SL").length, tp=tr.filter(t=>t.exit==="TP").length;
+  h+=`<div class="panel"><div class="grid">
+    ${stat("Trades",tr.length,null,fmtNum(lots)+" lots")}
+    ${stat("Winners",W,"var(--up)",tr.length?(W/tr.length*100).toFixed(1)+"%":"")}
+    ${stat("Losers",L,"var(--down)",tr.length?(L/tr.length*100).toFixed(1)+"%":"")}
+    ${stat("TP / SL hits",hasExit?tp+" / "+sl:"—",null,hasExit?"":"needs EA v1.2")}
+    ${stat("Commission",fmtMoney(commission,cur),sColor(commission))}
+    ${stat("Final P/L",fmtMoney(pr,cur),sColor(pr))}
+    ${stat("Pips",pp!=null?fmtNum(pp,1):"—",sColor(pp))}
+  </div></div>`;
+  h+=posHtml;
+  // ---- history table ----
+  const shown=tr.slice(0,state.tradesShown);
+  h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST</div>
+    <div class="tblwrap"><table>
+    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
+  shown.forEach(t=>{
+    const exitColor=t.exit==="TP"?"var(--up)":t.exit==="SL"?"var(--down)":t.exit==="SO"?"#E8B36A":"var(--dim)";
+    h+=`<tr class="mono">
+      <td style="color:var(--mute)">${t.openTime!=null?dtIstStr(t.openTime):"—"}</td>
+      <td style="color:var(--mute)">${dtIstStr(t.closeTime)}</td>
+      <td style="color:var(--text)">${esc(t.symbol)}</td>
+      <td style="color:${t.dir==="BUY"?"var(--up)":"var(--down)"}">${esc(t.dir)}</td>
+      <td style="color:var(--mute)">${fmtNum(t.volume)}</td>
+      <td style="color:var(--mute)">${t.openPrice!=null?fmtNum(t.openPrice,5):"—"}</td>
+      <td style="color:var(--mute)">${t.closePrice!=null?fmtNum(t.closePrice,5):"—"}</td>
+      <td style="color:var(--mute)">${durStr(t.duration)}</td>
+      <td style="color:${exitColor}">${esc(t.exit)}</td>
+      <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
+      <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td></tr>`;});
+  h+=`</table></div>`;
+  if(tr.length>state.tradesShown)
+    h+=`<div style="text-align:center;margin-top:12px"><button class="btn ghost" onclick="showMoreTrades()">Show ${Math.min(50,tr.length-state.tradesShown)} more</button></div>`;
+  h+=`</div>`;
+  return h;
+}
+function positionsHTML(a,cur,openPL,span){
+  const positions=(a.positions||[]).slice().sort((x,y)=>compareInstruments(x.symbol,y.symbol));
+  let h=`<div class="panel ${span||""}" style="padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="sect">Open positions (${positions.length})</div>
+      <span class="mono" style="font-size:14px;font-weight:600;color:${sColor(openPL)}">${openPL>=0?"+":""}${fmtMoney(openPL,cur)}</span></div>`;
+  if(positions.length){
+    h+=`<div class="tblwrap"><table><tr><th>Symbol</th><th>Type</th><th>Lots</th><th>Open</th><th>Now</th><th>SL</th><th>TP</th><th>Swap</th><th>P/L</th></tr>`;
+    positions.forEach(p=>{
+      h+=`<tr class="mono"><td style="color:var(--text)">${esc(p.symbol)}</td>
+        <td style="color:${p.type==="BUY"?"var(--up)":"var(--down)"}">${esc(p.type)}</td>
+        <td style="color:var(--mute)">${fmtNum(p.volume)}</td>
+        <td style="color:var(--mute)">${fmtNum(p.openPrice,5)}</td>
+        <td style="color:var(--mute)">${fmtNum(p.currentPrice,5)}</td>
+        <td style="color:var(--dim)">${p.sl?fmtNum(p.sl,5):"—"}</td>
+        <td style="color:var(--dim)">${p.tp?fmtNum(p.tp,5):"—"}</td>
+        <td style="color:${sColor(p.swap)}">${fmtNum(p.swap)}</td>
+        <td style="color:${sColor(p.profit)}">${fmtNum(p.profit)}</td></tr>`;});
+    h+=`</table></div>`;
+  } else h+=`<div style="color:var(--dim);font-size:13px">No open positions right now.</div>`;
+  return h+`</div>`;
+}
+
+function settingsHTML(){
+  return `<div class="settings">
+    <div class="disp" style="font-size:28px;font-weight:700;margin-bottom:4px">Settings</div>
+    <p style="font-size:13px;color:var(--mute);line-height:1.7;margin-bottom:20px">
+      Database: <span class="mono" style="color:var(--brass)">${FIREBASE_URL.replace("https://","")}</span>. Saved only in this browser.</p>
+    <div class="panel" style="padding:18px;margin-bottom:20px">
+      <div class="fld"><label>Database secret</label>
+        <input type="password" id="setSecret" value="${esc(state.auth)}" placeholder="Database secret"></div>
+      <div class="fld"><label>Refresh every</label>
+        <select id="setRefresh">${[["10000","10s"],["30000","30s"],["60000","1m"],["300000","5m"]].map(([v,l])=>
+          `<option value="${v}" ${state.refreshMs==v?"selected":""}>${l}</option>`).join("")}</select></div>
+    </div>
+    <button class="btn" style="width:100%;padding:13px 0;font-size:14px" onclick="saveSettings()">Save changes</button>
+    <button class="icobtn" style="width:100%;margin-top:10px;padding:11px 0" onclick="toggleSettings()">Back</button></div>`;
+}
+
+/* ============ ACTIONS ============ */
+function filteredTrades(m,{ignoreSymbol=false}={}){
+  let tr=m.allTrades;
+  if(!ignoreSymbol && state.fSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.fSymbol);
+  if(state.fExit!=="ALL") tr=tr.filter(t=>t.exit===state.fExit);
+  if(state.fComment!=="ALL") tr=tr.filter(t=>(t.comment||"(none)")===state.fComment);
+  const t0=istDayStartUnix();
+  if(state.fDays==="TD") tr=tr.filter(t=>tradeInWindow(t,t0,t0+86400));
+  else if(state.fDays==="YD") tr=tr.filter(t=>tradeInWindow(t,t0-86400,t0));
+  else if(state.fDays==="CUSTOM"){
+    const f=dateStrToUnix(state.fFrom), to=dateStrToUnix(state.fTo);
+    tr=tr.filter(t=>tradeInWindow(t,f,to==null?null:to+86400));
+  }
+  else if(Number(state.fDays)>0){ const cut=Math.floor(Date.now()/1000)-Number(state.fDays)*86400; tr=tr.filter(t=>tradeInWindow(t,cut,null)); }
+  return tr;
+}
+const SESSIONS=[
+  {id:"SYD",name:"Sydney",ist:"23:30–06:00"},
+  {id:"ASIA",name:"Asian",ist:"06:00–13:00"},
+  {id:"LDN",name:"London",ist:"13:00–17:30"},
+  {id:"US_EARLY",name:"US",ist:"17:30–19:00"},
+  {id:"US_MIDDLE",name:"US",ist:"19:00–21:00"},
+  {id:"US_LATE",name:"US",ist:"21:00–23:30"},
+];
+function sessionOf(unix){
+  const istSec=((unix+IST_OFF)%86400+86400)%86400;
+  const istMin=istSec/60;
+  if(istMin>=360 && istMin<780)  return "ASIA";      // 06:00–13:00 IST
+  if(istMin>=780 && istMin<1050) return "LDN";       // 13:00–17:30 IST
+  if(istMin>=1050 && istMin<1140) return "US_EARLY"; // 17:30–19:00 IST
+  if(istMin>=1140 && istMin<1260) return "US_MIDDLE";// 19:00–21:00 IST
+  if(istMin>=1260 && istMin<1410) return "US_LATE";  // 21:00–23:30 IST
+  return "SYD";                                      // 23:30–06:00 IST
+}
+function istDayStartUnix(){ // trading-day start: most recent 02:30 IST (21:00 UTC)
+  const nowU=Math.floor(Date.now()/1000);
+  return Math.floor((nowU+DAY_SHIFT)/86400)*86400-DAY_SHIFT; }
+function dateStrToUnix(str){ // yyyy-mm-dd trading day: starts 02:30 IST of that date
+  if(!str) return null; const [y,m,d]=str.split("-").map(Number);
+  return Date.UTC(y,m-1,d)/1000-DAY_SHIFT; }
+function tradeInWindow(t,from,to){
+  const inRange=u=>u!=null&&(from==null||u>=from)&&(to==null||u<to);
+  return inRange(t.openTime)||inRange(t.closeTime);
+}
+function analyticTrades(m){
+  let tr=m.allTrades.slice().sort((a,b)=>a.closeTime-b.closeTime);
+  if(state.aSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.aSymbol);
+  const t0=istDayStartUnix();
+  if(state.aPreset==="TODAY") tr=tr.filter(t=>tradeInWindow(t,t0,t0+86400));
+  else if(state.aPreset==="YDAY") tr=tr.filter(t=>tradeInWindow(t,t0-86400,t0));
+  else if(state.aPreset==="CUSTOM"){
+    const f=dateStrToUnix(state.aFrom), to=dateStrToUnix(state.aTo);
+    tr=tr.filter(t=>tradeInWindow(t,f,to==null?null:to+86400));
+  }
+  return tr;
+}
+function tradeStats(tr){
+  const won=tr.filter(t=>t.profit>0), lost=tr.filter(t=>t.profit<0);
+  const grossWin=won.reduce((s,t)=>s+t.profit,0);
+  const grossLoss=Math.abs(lost.reduce((s,t)=>s+t.profit,0));
+  const longs=tr.filter(t=>t.dir==="BUY"), shorts=tr.filter(t=>t.dir==="SELL");
+  const hasPips=tr.some(t=>t.pips!=null);
+  const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+  const std=a=>{if(a.length<2)return null;const m=mean(a);return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1));};
+  const durs=tr.map(t=>t.duration).filter(x=>x!=null);
+  // consecutive streaks (by close time order)
+  let curC=0,curA=0,curSign=0, maxW={count:0,amount:0}, maxL={count:0,amount:0};
+  for(const t of tr){
+    const sign=t.profit>0?1:t.profit<0?-1:0;
+    if(sign===0) continue;
+    if(sign===curSign){ curC++; curA+=t.profit; }
+    else { curSign=sign; curC=1; curA=t.profit; }
+    if(sign>0 && (curC>maxW.count||(curC===maxW.count&&curA>maxW.amount))) maxW={count:curC,amount:curA};
+    if(sign<0 && (curC>maxL.count||(curC===maxL.count&&curA<maxL.amount))) maxL={count:curC,amount:curA};
+  }
+  return {
+    n:tr.length, W:won.length, L:lost.length,
+    winPct:tr.length?won.length/tr.length*100:null,
+    profit:tr.reduce((s,t)=>s+t.profit,0),
+    pf:grossLoss>0?grossWin/grossLoss:(grossWin>0?Infinity:null),
+    expectancy:tr.length?tr.reduce((s,t)=>s+t.profit,0)/tr.length:null,
+    avgWin:won.length?grossWin/won.length:null,
+    avgLoss:lost.length?grossLoss/lost.length:null,
+    avgWinPips:hasPips&&won.length?won.reduce((s,t)=>s+(t.pips||0),0)/won.length:null,
+    avgLossPips:hasPips&&lost.length?lost.reduce((s,t)=>s+(t.pips||0),0)/lost.length:null,
+    best:tr.length?Math.max(...tr.map(t=>t.profit)):null,
+    worst:tr.length?Math.min(...tr.map(t=>t.profit)):null,
+    pips:hasPips?tr.reduce((s,t)=>s+(t.pips||0),0):null,
+    lots:tr.reduce((s,t)=>s+(t.volume||0),0),
+    std:std(tr.map(t=>t.profit)),
+    tpHits:tr.filter(t=>t.exit==="TP").length, slHits:tr.filter(t=>t.exit==="SL").length,
+    longs:longs.length, shorts:shorts.length,
+    longsWon:longs.filter(t=>t.profit>0).length, shortsWon:shorts.filter(t=>t.profit>0).length,
+    avgDur:durs.length?mean(durs):null, maxDur:durs.length?Math.max(...durs):null,
+    maxW, maxL,
+  };
+}
+const normMinute = minute => ((Math.floor(minute)%1440)+1440)%1440;
+function time12(minute){
+  const m=normMinute(minute), h=Math.floor(m/60), mm=m%60;
+  return `${h%12||12}:${String(mm).padStart(2,"0")} ${h<12?"AM":"PM"}`;
+}
+function intervalLabel(i,bucketMinutes){
+  const start=i*bucketMinutes;
+  return `${time12(start+1)}–${time12(start+30)}`;
+}
+function clock24(minute){
+  const m=normMinute(minute), h=Math.floor(m/60), mm=m%60;
+  return `${h}:${String(mm).padStart(2,"0")}`;
+}
+function intervalDisplayLabel(i,bucketMinutes){
+  const start=i*bucketMinutes;
+  return `${clock24(start)}–${clock24(start+bucketMinutes)}`;
+}
+function halfHourLabel(i){
+  return intervalLabel(i,30);
+}
+function halfHourDisplayLabel(i){
+  return intervalDisplayLabel(i,30);
+}
+function signedPnl(v){
+  const n=Math.abs(v||0)<0.005?0:Number(v||0);
+  return (n>=0?"+":"")+n.toFixed(2);
+}
+function brokerHalfHourLabel(i,serverOff=10800,bucketMinutes=30){
+  const brokerStart=i*bucketMinutes-(IST_OFF-serverOff)/60;
+  return `Broker ${time12(brokerStart+1)}–${time12(brokerStart+bucketMinutes)}`;
+}
+function distFor(tr,serverOff=10800,bucketMinutes=30){
+  const bucketCount=Math.ceil(1440/bucketMinutes);
+  const hourWL=Array.from({length:bucketCount},(_,i)=>({label:intervalLabel(i,bucketMinutes),displayLabel:intervalDisplayLabel(i,bucketMinutes),subLabel:brokerHalfHourLabel(i,serverOff,bucketMinutes),periodProfit:0,overallProfit:0,pnlLabel:"",a:0,b:0}));
+  const dayWL=Array.from({length:7},(_,w)=>({label:WEEKDAYS[w],a:0,b:0}));
+  const durDefs=[["<1m",60],["1–2m",120],["2–3m",180],["3–5m",300],["5–15m",900],["15–60m",3600],["1–4h",14400],[">4h",Infinity]];
+  const durBuckets=durDefs.map(([label])=>({label,a:0,b:0}));
+  for(const t of tr){
+    const ot=t.openTime??t.closeTime;
+    const d=new Date((ot+DAY_SHIFT)*1000);
+    const tgt=t.profit>0?"a":"b";
+    const local=new Date((ot+IST_OFF)*1000);
+    const minuteOfDay=local.getUTCHours()*60+local.getUTCMinutes();
+    const bucket=Math.min(bucketCount-1,Math.floor(minuteOfDay/bucketMinutes));
+    hourWL[bucket][tgt]++; hourWL[bucket].periodProfit+=t.profit||0; dayWL[d.getUTCDay()][tgt]++;
+    if(t.duration!=null) for(let i=0;i<durDefs.length;i++){ if(t.duration<durDefs[i][1]){ durBuckets[i][t.profit>0?"a":"b"]++; break; } }
+  }
+  let overall=0;
+  for(const slot of hourWL){
+    overall+=slot.periodProfit;
+    slot.overallProfit=overall;
+    slot.pnlLabel=`P ${signedPnl(slot.periodProfit)}  O ${signedPnl(slot.overallProfit)}`;
+  }
+  return {hourWL,dayWL,durBuckets};
+}
+function rangeControls(px){
+  return `<div style="display:flex;gap:6px;flex-wrap:nowrap;align-items:center;white-space:nowrap;overflow-x:auto;flex:0 1 auto;min-width:0">
+    <select style="max-width:150px;padding:6px 10px;font-size:12px" onchange="setAFilter('${px}Preset',this.value)">
+      ${[["ALL","All time"],["TODAY","Today"],["YDAY","Yesterday"],["CUSTOM","Custom"]].map(([v,l])=>
+        `<option value="${v}" ${state[px+"Preset"]===v?"selected":""}>${l}</option>`).join("")}
+    </select>
+    ${state[px+"Preset"]==="CUSTOM"?`
+      <input type="date" style="max-width:145px;padding:6px 8px;font-size:12px" value="${esc(state[px+"From"])}" onchange="setAFilter('${px}From',this.value)">
+      <span style="color:var(--dim);font-size:12px">to</span>
+      <input type="date" style="max-width:145px;padding:6px 8px;font-size:12px" value="${esc(state[px+"To"])}" onchange="setAFilter('${px}To',this.value)">`:""}
+  </div>`;
+}
+function tradesInRange(m,px){
+  let tr=m.allTrades;
+  const p=state[px+"Preset"], t0=istDayStartUnix();
+  if(p==="TODAY") tr=tr.filter(t=>tradeInWindow(t,t0,t0+86400));
+  else if(p==="YDAY") tr=tr.filter(t=>tradeInWindow(t,t0-86400,t0));
+  else if(p==="CUSTOM"){
+    const f=dateStrToUnix(state[px+"From"]), to=dateStrToUnix(state[px+"To"]);
+    tr=tr.filter(t=>tradeInWindow(t,f,to==null?null:to+86400));
+  }
+  return tr;
+}
+function aFilterControls(m){
+  const syms=[...new Set(m.allTrades.map(t=>t.symbol).filter(Boolean))].sort(compareInstruments);
+  return `<div style="display:flex;gap:8px;flex-wrap:nowrap;align-items:center;white-space:nowrap;overflow-x:auto;min-width:0">
+      <span style="font-size:12px;color:var(--dim)">Instrument</span>
+      <select style="max-width:170px" onchange="setAFilter('aSymbol',this.value)">
+        <option value="ALL" ${state.aSymbol==="ALL"?"selected":""}>All instruments</option>
+        ${syms.map(sy=>`<option value="${esc(sy)}" ${state.aSymbol===sy?"selected":""}>${esc(sy)}</option>`).join("")}
+      </select>
+      <span style="font-size:12px;color:var(--dim);margin-left:4px">Date</span>
+      <select style="max-width:170px" onchange="setAFilter('aPreset',this.value)">
+        ${[["ALL","All time"],["TODAY","Today"],["YDAY","Yesterday"],["CUSTOM","Custom"]].map(([v,l])=>
+          `<option value="${v}" ${state.aPreset===v?"selected":""}>${l}</option>`).join("")}
+      </select>
+      ${state.aPreset==="CUSTOM"?`
+        <input type="date" style="max-width:160px" value="${esc(state.aFrom)}" onchange="setAFilter('aFrom',this.value)">
+        <span style="color:var(--dim);font-size:12px">to</span>
+        <input type="date" style="max-width:160px" value="${esc(state.aTo)}" onchange="setAFilter('aTo',this.value)">`:""}
+    </div>`;
+}
+function aFilterBar(m){
+  return `<div class="panel" style="padding:14px 16px">
+    <div class="sect" style="margin-bottom:8px">Filters</div>
+    ${aFilterControls(m)}
+    <div style="font-size:12px;color:var(--dim);margin-top:8px">Trading day rolls at 02:30 IST • filters apply to trade-based stats below</div>
+  </div>`;
+}
+window.setAFilter=(k,v)=>{ state[k]=v; render(); };
+window.setFilter=(k,v)=>{ state[k]=v; state.tradesShown=50; render(); };
+window.filterSymbol=sym=>{ state.fSymbol=sym; state.fExit="ALL"; state.tab="trades"; state.tradesShown=50; render(); };
+window.selectAcct=id=>{state.selected=id;state.tab="overview";state.tradesShown=50;state.fSymbol="ALL";state.fExit="ALL";state.fDays=0;state.fFrom="";state.fTo="";state.fComment="ALL";state.aSymbol="ALL";state.aPreset="ALL";state.anSymbol="ALL";state.anPreset="LAST5";state.anFrom="";state.anTo="";state.anLarge=false;state.balanceMonth="ALL";state.tpSymbol="ALL";state.tpPreset="TODAY";state.tpFrom="";state.tpTo="";state.customFrom="";state.customTo="";render();};
+window.selectTab=t=>{state.tab=t;render();};
+window.toggleAnalysisZoom=()=>{state.anLarge=!state.anLarge;render();};
+window.showMoreTrades=()=>{state.tradesShown+=50;render();};
+window.toggleSettings=()=>{state.showSettings=!state.showSettings;render();};
+window.saveSecret=()=>{const v=$("#secretInput").value.trim();if(!v)return;
+  state.auth=v;localStorage.setItem(LS.auth,v);state.needsAuth=false;state.error=null;render();refresh(true);};
+window.saveSettings=()=>{state.auth=$("#setSecret").value.trim();
+  state.refreshMs=Number($("#setRefresh").value)||30000;
+  localStorage.setItem(LS.auth,state.auth);localStorage.setItem(LS.refresh,state.refreshMs);
+  state.showSettings=false;state.accounts=null;render();startTimer();refresh(true);};
+window.refresh=refresh;
+
+/* ============ BOOT ============ */
+refresh(true);
+startTimer();
+</script>
+</body>
+</html>
