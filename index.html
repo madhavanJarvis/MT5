@@ -438,7 +438,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   const dailyGrowth = [...dayBal].map(([date,balance])=>({date,balance}));
   const growthCurve = [...growthByDay].map(([date,g])=>({date,balance:g}));
   const ddCurve = [...dayDD].map(([date,dd])=>({date,balance:-dd}));
-  const dailyMaxProfit={}, dailyMaxProfitAt={}, dailyRunningProfit={};
+  const dailyMaxProfit={}, dailyMaxProfitAt={}, dailyMaxLoss={}, dailyMaxLossAt={}, dailyRunningProfit={};
   for(const t of trades){
     const dk=metricDayKey(t.closeTime);
     const running=(dailyRunningProfit[dk]||0)+(t.profit||0);
@@ -446,6 +446,10 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     if(dailyMaxProfit[dk]==null) dailyMaxProfit[dk]=0;
     if(running>dailyMaxProfit[dk]){
       dailyMaxProfit[dk]=running; dailyMaxProfitAt[dk]=t.closeTime;
+    }
+    if(dailyMaxLoss[dk]==null) dailyMaxLoss[dk]=0;
+    if(running<dailyMaxLoss[dk]){
+      dailyMaxLoss[dk]=running; dailyMaxLossAt[dk]=t.closeTime;
     }
   }
 
@@ -642,7 +646,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     dailyGrowth, growthCurve, ddCurve, monthly, heat, byHour, byDay, symbols,
     periods, todayGrossProfit, todayCommission, todaySwap, todayFinalProfit,
     flowEvents, balanceTimeline:timeline, dailyProfit:Object.fromEntries(dayProfit),
-    dailyMaxProfit, dailyMaxProfitAt,
+    dailyMaxProfit, dailyMaxProfitAt, dailyMaxLoss, dailyMaxLossAt,
     dailyDD:Object.fromEntries(dailyDD), dailyDDMoney:Object.fromEntries(dailyDDMoney),
     dailyMaxDD:Object.fromEntries(dailyMaxDD), dailyMaxDDMoney:Object.fromEntries(dailyMaxDDMoney),
     hourWL, dayWL, durBuckets, riskOfRuin,
@@ -1358,16 +1362,18 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
         ${dailyBalanceMonthOptions().map(([v,l])=>`<option value="${v}" ${state.balanceMonth===v?"selected":""}>${l}</option>`).join("")}
       </select>
     </div>
-    <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TMP = maximum net realized profit reached during that trading day; the timestamp is shown below the value.</div>
+    <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TML = lowest net realized P/L reached during that trading day; TMP = highest net realized P/L. The timestamp is shown below each value.</div>
     <div class="tblscroll-top" aria-label="Scroll daily balances table horizontally"><div></div></div>
     <div class="tblwrap"><table class="daily-balances-table">
-      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>TMP</th><th>Day's profit</th><th>Overall profit</th><th>Max floating profit</th><th>Max floating loss</th><th>Max drawdown</th><th>Day's drawdown</th></tr>
+      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>TML</th><th>TMP</th><th>Day's profit</th><th>Overall profit</th><th>Max floating profit</th><th>Max floating loss</th><th>Max drawdown</th><th>Day's drawdown</th></tr>
       ${days.length?days.map(d=>{
         const s=balanceForDay(m,d.start);
         const fl=dailyFloating?.[d.key]||{};
         const dayProfit=m.dailyProfit?.[d.key]??0;
         const maxProfit=m.dailyMaxProfit?.[d.key];
         const maxProfitAt=m.dailyMaxProfitAt?.[d.key];
+        const maxLoss=m.dailyMaxLoss?.[d.key]??0;
+        const maxLossAt=m.dailyMaxLossAt?.[d.key];
         const dayTrades=m.allTrades.filter(t=>t.closeTime!=null&&t.closeTime>=d.start&&t.closeTime<d.start+86400);
         const expanded=!!state.dailyExpanded[d.key];
         const overallProfit=m.allTrades.filter(t=>t.closeTime!=null&&t.closeTime<d.start+86400).reduce((sum,t)=>sum+t.profit,0);
@@ -1383,14 +1389,15 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:var(--text)"><div>${fmtMoney(s.highestBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${dtStr(s.highestBalAt)}</div></td>
           <td style="color:var(--brass)">${fmtMoney(fl.baseline,cur)}<div style="font-size:10px;color:var(--dim);font-family:inherit">${fl.baselineAt!=null?"at "+dtStr(fl.baselineAt):""}</div></td>
           <td style="color:${fl.breach?"var(--down)":"var(--mute)"}">${fmtMoney(fl.floor,cur)}${fl.breach?"<div style=\"font-size:10px\">BREACH</div>":""}</td>
+          <td style="color:${sColor(maxLoss)}"><div>${fmtMoney(maxLoss,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${maxLossAt!=null?"at "+dtStr(maxLossAt):""}</div></td>
           <td style="color:${sColor(maxProfit)}"><div>${fmtMoney(maxProfit,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${maxProfitAt!=null?"at "+dtStr(maxProfitAt):""}</div></td>
           <td style="color:${sColor(dayProfit)}">${fmtMoney(dayProfit,cur)}</td>
           <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td>
           <td style="color:var(--up)">${fmtMoney(fl.maxProfit,cur)}</td>
           <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
           <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
-          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>${expanded?`<tr class="daily-detail"><td colspan="15"><div class="daily-detail-title">${esc(d.key)} · symbol breakdown</div>${symbolStatsTable(dayTrades,cur,{showPips:false,interactive:false})}</td></tr>`:""}`;
-      }).join(""):`<tr><td colspan="15" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
+          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>${expanded?`<tr class="daily-detail"><td colspan="16"><div class="daily-detail-title">${esc(d.key)} · symbol breakdown</div>${symbolStatsTable(dayTrades,cur,{showPips:false,interactive:false})}</td></tr>`:""}`;
+      }).join(""):`<tr><td colspan="16" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
     </table></div>
   </div>`;
 }
