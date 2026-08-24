@@ -696,7 +696,15 @@ async function refresh(manual){
   try{
     const data=await fetchAll();
     state.accounts=data;
-    if(state.selected!=="ALL"&&!data[state.selected]) state.selected="ALL";
+    // Keep the current dashboard tile across polling refreshes. Thunderbolt is
+    // a synthetic tile, so it is not a key in the accounts payload.
+    if(Object.keys(data).length && state.selected!=="ALL"){
+      const visible=accountsForView(data);
+      const selectedVisible=state.selected==="BOT:THUNDERBOLT"
+        ? Object.values(visible).some(a=>a?.botMetrics?.trades>0&&/thor/i.test(a?.info?.label||""))
+        : !!visible[state.selected];
+      if(!selectedVisible) state.selected="ALL";
+    }
     state.error=Object.keys(data).length?null:"Connected, but no accounts yet — make sure the EA is running and publishing.";
     state.needsAuth=false; state.lastUpdate=Date.now();
   }catch(e){ state.error=e.message; if(e.needsAuth){state.needsAuth=true;state.accounts=null;} }
