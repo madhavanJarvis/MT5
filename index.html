@@ -76,6 +76,9 @@ th{color:var(--dim);text-align:center;padding:6px 8px 8px;font-weight:600;border
 td{padding:9px 8px;white-space:nowrap;border-bottom:1px solid #F2F4FB;text-align:center}
 tr:last-child td{border-bottom:none}
 .tblwrap{overflow-x:auto}
+.tblscroll-top{overflow-x:auto;overflow-y:hidden;height:14px;margin:0 0 4px;border-bottom:1px solid var(--line)}
+.tblscroll-top>div{height:1px;min-width:1600px}
+.daily-balances-table{min-width:1600px}
 .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
 .bar-track{flex:1;height:9px;background:#EEF1FA;border-radius:5px;overflow:hidden}
 .bar-fill{height:100%;border-radius:5px}
@@ -911,6 +914,13 @@ function render(){
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
+  document.querySelectorAll(".tblscroll-top").forEach(top=>{
+    const wrap=top.nextElementSibling;
+    if(!wrap||!wrap.classList.contains("tblwrap")) return;
+    const sync=(source,target)=>()=>{ target.scrollLeft=source.scrollLeft; };
+    top.addEventListener("scroll",sync(top,wrap));
+    wrap.addEventListener("scroll",sync(wrap,top));
+  });
   const si=$("#secretInput"); if(si) si.addEventListener("keydown",e=>{if(e.key==="Enter")saveSecret();});
 }
 
@@ -1341,8 +1351,9 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
       </select>
     </div>
     <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TMP = maximum net realized profit reached during that trading day; the timestamp is shown below the value.</div>
-    <div class="tblwrap"><table>
-      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>Max floating profit</th><th>Max floating loss</th><th>TMP</th><th>Day's profit</th><th>Max drawdown</th><th>Day's drawdown</th><th>Overall profit</th></tr>
+    <div class="tblscroll-top" aria-label="Scroll daily balances table horizontally"><div></div></div>
+    <div class="tblwrap"><table class="daily-balances-table">
+      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>Max floating profit</th><th>Max floating loss</th><th>TMP</th><th>Day's profit</th><th>Overall profit</th><th>Max drawdown</th><th>Day's drawdown</th></tr>
       ${days.length?days.map(d=>{
         const s=balanceForDay(m,d.start);
         const fl=dailyFloating?.[d.key]||{};
@@ -1366,9 +1377,9 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
           <td style="color:${sColor(maxProfit)}"><div>${fmtMoney(maxProfit,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${maxProfitAt!=null?"at "+dtStr(maxProfitAt):""}</div></td>
           <td style="color:${sColor(dayProfit)}">${fmtMoney(dayProfit,cur)}</td>
+          <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td>
           <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
-          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td>
-          <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td></tr>`;
+          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>`;
       }).join(""):`<tr><td colspan="15" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
     </table></div>
   </div>`;
