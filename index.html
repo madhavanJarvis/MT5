@@ -1734,6 +1734,29 @@ function tabAnalysis(m,cur,color,a){
     ${stackedChart(d.durBuckets,{height:large?360:260})}${legend}</div>`;
   return h;
 }
+function commentDateBreakdown(tr,cur){
+  if(state.fComment==="ALL"||!tr.length) return "";
+  const groups={};
+  tr.forEach(t=>{
+    const key=dayKey(t.closeTime);
+    const g=groups[key]||{symbols:new Set(),n:0,w:0,l:0,lots:0,commission:0,profit:0,first:null,last:null};
+    g.symbols.add(t.symbol||"—"); g.n++; if(t.profit>0)g.w++; else if(t.profit<0)g.l++;
+    g.lots+=t.volume||0; g.commission+=t.commission||0; g.profit+=t.profit||0;
+    g.first=g.first==null?t.closeTime:Math.min(g.first,t.closeTime); g.last=g.last==null?t.closeTime:Math.max(g.last,t.closeTime);
+    groups[key]=g;
+  });
+  const rows=Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([key,g])=>`<tr class="mono">
+    <td style="color:var(--brass);font-weight:600">${esc(key)}</td>
+    <td style="color:var(--mute)">${[...g.symbols].sort(compareInstruments).map(esc).join(", ")}</td>
+    <td>${g.n}</td><td><span style="color:var(--up)">${g.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${g.l}</span></td>
+    <td style="color:var(--mute)">${fmtNum(g.lots)}</td>
+    <td style="color:${sColor(g.commission)}">${fmtMoney(g.commission,cur)}</td>
+    <td style="color:${sColor(g.profit)}">${fmtMoney(g.profit,cur)}</td>
+    <td style="color:var(--dim)">${dtIstStr(g.first)}</td><td style="color:var(--dim)">${dtIstStr(g.last)}</td></tr>`).join("");
+  return `<div class="panel" style="padding:16px"><div class="sect">Date-wise breakdown <span style="color:var(--dim);text-transform:none;letter-spacing:0">• ${esc(state.fComment)} • trading date in IST</span></div>
+    <div class="tblwrap"><table><tr><th>Date</th><th>Symbols</th><th>Orders</th><th>W / L</th><th>Lots</th><th>Commission</th><th>Final P/L</th><th>First close</th><th>Last close</th></tr>${rows}</table></div></div>`;
+}
+
 function tabTrades(m,a,cur){
   const posHtml=positionsHTML(a,cur,(a.positions||[]).reduce((s,p)=>s+(p.profit||0),0));
   let h="";
@@ -1835,6 +1858,7 @@ function tabTrades(m,a,cur){
     ${stat("Final P/L",fmtMoney(pr,cur),sColor(pr))}
     ${stat("Pips",pp!=null?fmtNum(pp,1):"—",sColor(pp))}
   </div></div>`;
+  h+=commentDateBreakdown(tr,cur);
   h+=posHtml;
   // ---- history table ----
   const shown=tr.slice(0,state.tradesShown);
