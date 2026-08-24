@@ -893,12 +893,12 @@ function render(){
     html+=`<div class="chips">`;
     html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     const botOwnerLogin=Object.keys(acc).find(l=>acc[l]?.botMetrics?.trades>0 && /thor/i.test(acc[l]?.info?.label||""));
+    if(botOwnerLogin) html+=botTileHTML(acc[botOwnerLogin].botMetrics,acc[botOwnerLogin].info?.currency||allCur);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,a.info?.label||l,fmtMoney(a.info?.equity,a.info?.currency),
         PALETTE[i%PALETTE.length],(a.metrics?.dailyGrowth||[]).slice(-30).map(g=>g.balance),stale,
         a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null);
-      if(l===botOwnerLogin) html+=botTileHTML(a.botMetrics,a.info?.currency||"USD");
     });
     html+=`</div>`;
     if(state.selected==="ALL") html+=overviewHTML(acc);
