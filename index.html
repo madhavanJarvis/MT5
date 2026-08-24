@@ -197,7 +197,7 @@ const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
 const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
-const ACCOUNT_TILE_ORDER = ["thor", "drdoom", "marvel2m", "marvel3m", "atlas"];
+const ACCOUNT_TILE_ORDER = ["tb", "thor", "drdoom", "marvel2m", "marvel3m", "atlas"];
 const tileLabelKey = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function orderedTileLogins(accounts){
   return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login)}))
@@ -892,8 +892,6 @@ function render(){
     const allCur=acc[logins[0]].info?.currency||"USD";
     html+=`<div class="chips">`;
     html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
-    const botOwnerLogin=Object.keys(acc).find(l=>acc[l]?.botMetrics?.trades>0 && /thor/i.test(acc[l]?.info?.label||""));
-    if(botOwnerLogin) html+=botTileHTML(acc[botOwnerLogin].botMetrics,acc[botOwnerLogin].info?.currency||allCur);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,a.info?.label||l,fmtMoney(a.info?.equity,a.info?.currency),
@@ -902,14 +900,6 @@ function render(){
     });
     html+=`</div>`;
     if(state.selected==="ALL") html+=overviewHTML(acc);
-    else if(state.selected==="BOT:THUNDERBOLT" && botOwnerLogin){
-      const owner=acc[botOwnerLogin], botAccount={...owner,metrics:owner.botMetrics};
-      html+=tabsHTML();
-      let tabHtml;
-      try { tabHtml=accountTabHTML("Thunderbolt",botAccount,"#F59E6C"); }
-      catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
-      html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
-    }
     else if(acc[state.selected]){
       const color=PALETTE[logins.indexOf(state.selected)%PALETTE.length];
       html+=tabsHTML();
