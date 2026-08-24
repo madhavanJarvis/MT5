@@ -59,6 +59,11 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 .sect{font-family:inherit;font-size:14px;font-weight:700;color:var(--text);letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px}
 .sect span{font-weight:500}
 .chips{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 12px}
+.dashboard-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.dashboard-switch{display:flex;align-items:center;gap:9px;padding:8px 10px 8px 12px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;box-shadow:0 5px 16px rgba(74,151,181,.10);backdrop-filter:blur(16px)}
+.dashboard-switch label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
+.dashboard-switch select{width:auto;min-width:185px;padding:8px 30px 8px 10px;font-size:13px;font-weight:600;border-radius:8px}
+.dashboard-context{font-size:12px;color:var(--mute)}
 .chip{flex-shrink:0;min-width:152px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px 13px;cursor:pointer;color:var(--text);box-shadow:0 4px 14px rgba(90,110,190,.07)}
 .chip.active{border-color:var(--brass);box-shadow:0 6px 20px rgba(79,125,240,.18)}
 .chip .cl{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:4px}
@@ -203,8 +208,9 @@ const compareInstruments = (a,b) => {
   return oa-ob || sa.localeCompare(sb);
 };
 
+const savedAccountView=localStorage.getItem("fxdesk_account_view");
 let state = {
-  accounts:null, error:null, needsAuth:false, selected:"ALL", tab:"overview",
+  accounts:null, error:null, needsAuth:false, selected:"ALL", accountView:(savedAccountView==="ATLAS"||savedAccountView==="IFPRO")?"PROP":(savedAccountView||"ALL"), botView:"ALL", tab:"overview",
   lastUpdate:null, showSettings:false, tradesShown:50,
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
@@ -219,6 +225,30 @@ let state = {
 };
 let timer = null;
 
+function accountType(a){
+  const info=a?.info||{};
+  const text=[info.label,info.broker,info.server].filter(Boolean).join(" ").toLowerCase();
+  if(/atlas/.test(text)) return "ATLAS";
+  if(/if\s*pro|ifpro|instant\s*funding/.test(text)) return "IFPRO";
+  if(/metaquotes|mql5\s*demo|metaquotes-demo/.test(text)) return "DEMO";
+  if(/prop|ftmo|funded|funding|the5ers|topstep|apex|maven|myfunded|mentfunding|challenge/.test(text)) return "PROP";
+  return "PROP";
+}
+function accountsForView(accounts){
+  let scoped;
+  if(state.accountView==="ALL") scoped=accounts||{};
+  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)!=="DEMO"));
+  else scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)===state.accountView));
+  return Object.fromEntries(Object.entries(scoped).map(([login,a])=>[
+    login,
+    /thor/i.test(a?.info?.label||"") ? {
+      ...a,
+      metrics:a.metricsWithoutThunderbolt||a.metrics,
+      positions:(a.positions||[]).filter(p=>!String(p?.comment||"").startsWith("Tbolts|INV|M5|"))
+    } : a
+  ]));
+}
+
 /* ============ HELPERS ============ */
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -228,8 +258,18 @@ const fmtNum = (v,d=2) => (v==null||isNaN(v)||!isFinite(v)) ? (v===Infinity?"∞
 const fmtPct = (v,d=2) => (v==null||isNaN(v)||!isFinite(v)) ? "—" : Number(v).toFixed(d)+"%";
 const sColor = v => v>0 ? "var(--up)" : v<0 ? "var(--down)" : "var(--mute)";
 const IST_OFF = 19800; // UTC+5:30 (display times)
-const DAY_SHIFT = 10800; // trading day rolls at 02:30 IST = 21:00 UTC (broker server UTC+3 midnight)
-const dayKey = u => new Date((u+DAY_SHIFT)*1000).toISOString().slice(0,10); // trading day
+const DAY_SHIFT = 10800; // legacy/default: trading day rolls at 21:00 UTC = 02:30 IST
+let activeDayShift = DAY_SHIFT;
+const dayKey = (u,shift=activeDayShift) => new Date((u+shift)*1000).toISOString().slice(0,10); // trading day
+function rulesForInfo(info){
+  const text=[info?.label,info?.broker,info?.server].filter(Boolean).join(" ").toLowerCase();
+  if(/atlas/.test(text)) return {profile:"ATLAS",dayShift:0,resetLabel:"00:00 UTC / 05:30 IST",anchor:"higher_balance_equity"};
+  if(/if\s*pro|ifpro|instant\s*funding/.test(text)) return {profile:"IFPRO",dayShift:7200,resetLabel:"17:00 EST / 22:00 UTC / 03:30 IST",anchor:"model_specific"};
+  const published=Number(info?.tradingDayResetUTC);
+  if(Number.isFinite(published)&&published>=0&&published<24)
+    return {profile:"PUBLISHED",dayShift:((24-published)%24)*3600,resetLabel:`${String(published).padStart(2,"0")}:00 UTC`,anchor:"balance"};
+  return {profile:"DEFAULT",dayShift:DAY_SHIFT,resetLabel:"21:00 UTC / 02:30 IST",anchor:"balance"};
+}
 const istHour = u => Math.floor(((u+IST_OFF)%86400)/3600);
 const dtIstStr = u => { if(u==null) return "—"; const i=new Date((u+IST_OFF)*1000);
   return i.toISOString().slice(0,10)+" "+i.toISOString().slice(11,16); };
@@ -278,8 +318,20 @@ function realizedDayExtremes(trades,start,end){
 }
 
 /* ============ METRICS ENGINE v2 ============ */
-function computeMetrics(dealsRaw){
-  const deals = (dealsRaw||[]).filter(Boolean).slice().sort((a,b)=>a.t-b.t);
+function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null){
+  const dayShift=rules.dayShift??DAY_SHIFT;
+  const metricDayKey=u=>dayKey(u,dayShift);
+  const metricDayStart=()=>{const nowU=Math.floor(Date.now()/1000);return Math.floor((nowU+dayShift)/86400)*86400-dayShift;};
+  let source=(dealsRaw||[]).filter(Boolean);
+  if(botPrefix){
+    const botPositions=new Set(source.filter(d=>d.ty!==2&&String(d.cm||"").startsWith(botPrefix)).map(d=>String(d.id||"")));
+    source=source.filter(d=>d.ty!==2&&botPositions.has(String(d.id||"")));
+  }
+  if(excludeBotPrefix){
+    const excludedPositions=new Set(source.filter(d=>d.ty!==2&&String(d.cm||"").startsWith(excludeBotPrefix)).map(d=>String(d.id||"")));
+    source=source.filter(d=>d.ty===2||!excludedPositions.has(String(d.id||"")));
+  }
+  const deals = source.slice().sort((a,b)=>a.t-b.t);
   if(!deals.length) return null;
 
   let deposits=0, withdrawals=0, firstDepositTime=null;
@@ -331,7 +383,7 @@ function computeMetrics(dealsRaw){
       duration: P.openTime!=null ? P.closeTime-P.openTime : null});
   }
   trades.sort((a,b)=>a.closeTime-b.closeTime);
-  const todayStart=istDayStartUnix();
+  const todayStart=metricDayStart();
   const todayExtremes=realizedDayExtremes(trades,todayStart,todayStart+86400);
 
   const grossProfit = trades.reduce((s,t)=>s+(t.rawProfit||0),0);
@@ -360,7 +412,7 @@ function computeMetrics(dealsRaw){
     if(bal>peak) peak=bal;
     const ddPct = peak>0 ? (peak-bal)/peak*100 : 0;
     if(ddPct>maxDD){ maxDD=ddPct; maxDDMoney=peak-bal; }
-    const dk = dayKey(d.t), mk = dk.slice(0,7);
+    const dk = metricDayKey(d.t), mk = dk.slice(0,7);
     if(!(mk in monthStartBal)) monthStartBal[mk] = balBefore;
     dayBal.set(dk, bal);
     dayDD.set(dk, Math.max(dayDD.get(dk)||0, ddPct));
@@ -379,7 +431,7 @@ function computeMetrics(dealsRaw){
   const ddCurve = [...dayDD].map(([date,dd])=>({date,balance:-dd}));
   const dailyMaxProfit={}, dailyMaxProfitAt={}, dailyRunningProfit={};
   for(const t of trades){
-    const dk=dayKey(t.closeTime);
+    const dk=metricDayKey(t.closeTime);
     const running=(dailyRunningProfit[dk]||0)+(t.profit||0);
     dailyRunningProfit[dk]=running;
     if(dailyMaxProfit[dk]==null) dailyMaxProfit[dk]=0;
@@ -440,7 +492,7 @@ function computeMetrics(dealsRaw){
 
   /* ---- monthly analytics + heatmap ---- */
   const mm={};
-  for(const t of trades){ const k=dayKey(t.closeTime).slice(0,7);
+  for(const t of trades){ const k=metricDayKey(t.closeTime).slice(0,7);
     mm[k]=mm[k]||{month:k,profit:0,trades:0,pips:0};
     mm[k].profit+=t.profit; mm[k].trades++; mm[k].pips+=t.pips||0; }
   const monthly = Object.values(mm).sort((a,b)=>a.month.localeCompare(b.month));
@@ -457,7 +509,7 @@ function computeMetrics(dealsRaw){
   const byDay = Array.from({length:7},(_, w)=>({w,trades:0,profit:0}));
   for(const t of trades){
     const ot = t.openTime ?? t.closeTime;
-    const d=new Date((ot+DAY_SHIFT)*1000);
+    const d=new Date((ot+dayShift)*1000);
     byHour[istHour(ot)].trades++; byHour[istHour(ot)].profit+=t.profit;
     byDay[d.getUTCDay()].trades++; byDay[d.getUTCDay()].profit+=t.profit;
   }
@@ -471,7 +523,7 @@ function computeMetrics(dealsRaw){
   const symbols = Object.values(sm).sort(compareInstruments);
 
   /* ---- previous-day EOD balance & today's high (IST) ---- */
-  const t0=istDayStartUnix();
+  const t0=metricDayStart();
   let prevDayEOD=0, todayHighBal=null, todayLowBal=null, todayHighAt=t0, todayLowAt=t0, run=0;
   for(const d of deals){
     run += (d.p||0)+(d.c||0)+(d.sw||0);
@@ -496,7 +548,7 @@ function computeMetrics(dealsRaw){
   }
 
   /* ---- deposit/withdrawal markers ---- */
-  const flowEvents = deals.filter(d=>d.ty===2).map(d=>({date:dayKey(d.t), amt:d.p||0}));
+  const flowEvents = deals.filter(d=>d.ty===2).map(d=>({date:metricDayKey(d.t), amt:d.p||0}));
 
   /* ---- balance timeline for period-start lookups ---- */
   const timeline=[]; { let b=0; for(const d of deals){ b+=(d.p||0)+(d.c||0)+(d.sw||0); timeline.push({t:d.t,bal:b}); } }
@@ -504,12 +556,12 @@ function computeMetrics(dealsRaw){
 
   /* ---- periods: today / week / month / year (UTC) ---- */
   const nowU=Math.floor(Date.now()/1000);
-  const nowI=new Date((nowU+DAY_SHIFT)*1000); // shifted clock: trading-day calendar
-  const startToday=Math.floor((nowU+DAY_SHIFT)/86400)*86400-DAY_SHIFT;
+  const nowI=new Date((nowU+dayShift)*1000); // shifted clock: trading-day calendar
+  const startToday=Math.floor((nowU+dayShift)/86400)*86400-dayShift;
   const dow=(nowI.getUTCDay()+6)%7; // Monday=0
   const startWeek=startToday-dow*86400;
-  const startMonth=Date.UTC(nowI.getUTCFullYear(),nowI.getUTCMonth(),1)/1000-DAY_SHIFT;
-  const startYear=Date.UTC(nowI.getUTCFullYear(),0,1)/1000-DAY_SHIFT;
+  const startMonth=Date.UTC(nowI.getUTCFullYear(),nowI.getUTCMonth(),1)/1000-dayShift;
+  const startYear=Date.UTC(nowI.getUTCFullYear(),0,1)/1000-dayShift;
   const periodRow=(label,start)=>{
     const tr=trades.filter(t=>t.closeTime>=start || (t.openTime!=null&&t.openTime>=start));
     const pr=tr.reduce((s,t)=>s+t.profit,0);
@@ -533,7 +585,7 @@ function computeMetrics(dealsRaw){
   const dayWL=Array.from({length:7},(_,w)=>({label:WEEKDAYS[w],a:0,b:0}));
   for(const t of trades){
     const ot=t.openTime??t.closeTime;
-    const d=new Date((ot+DAY_SHIFT)*1000);
+    const d=new Date((ot+dayShift)*1000);
     const tgt=t.profit>0?"a":"b";
     hourWL[istHour(ot)][tgt]++; dayWL[d.getUTCDay()][tgt]++;
   }
@@ -596,6 +648,7 @@ function computeMetrics(dealsRaw){
 /* ============ FETCH ============ */
 function normalizeAccount(a){
   const info={...(a.info||{})};
+  const rules=rulesForInfo(info);
   const serverOff=inferServerOffset(info);
   if(info.updatedAt!=null) info.updatedAt=utcTime(info.updatedAt,serverOff);
   const positions=(Array.isArray(a.positions)?a.positions:Object.values(a.positions||{})).filter(Boolean)
@@ -613,7 +666,11 @@ function normalizeAccount(a){
       closeTime:utcTime(r.closeTime,serverOff),
       updatedAt:utcTime(r.updatedAt,serverOff)};
   });
-  return {info,orders,positions,dailyFloating,tpSlHistory,metrics:computeMetrics(deals),serverOffset:serverOff};
+  return {info,orders,positions,dailyFloating,tpSlHistory,rules,
+    metrics:computeMetrics(deals,rules),
+    metricsWithoutThunderbolt:computeMetrics(deals,rules,null,"Tbolts|INV|M5|"),
+    botMetrics:computeMetrics(deals,rules,"Tbolts|INV|M5|"),
+    serverOffset:serverOff};
 }
 async function fetchAll(){
   let url = FIREBASE_URL + "/accounts.json";
@@ -801,7 +858,12 @@ function render(){
       <button class="btn" onclick="saveSecret()">Connect</button></div></div>`;
   } else if(state.error){ html+=`<div class="alert err">⚠ ${esc(state.error)}</div>`; }
 
-  const acc=state.accounts||{}; const logins=orderedTileLogins(acc);
+  const allAcc=state.accounts||{}; const acc=accountsForView(allAcc); const logins=orderedTileLogins(acc);
+  const activeAccount=state.selected!=="ALL"&&state.selected!=="BOT:THUNDERBOLT"?acc[state.selected]
+    :state.selected==="BOT:THUNDERBOLT"?Object.values(acc).find(a=>a?.botMetrics?.trades>0&&/thor/i.test(a?.info?.label||""))
+    :(logins.length===1?acc[logins[0]]:null);
+  activeDayShift=activeAccount?.rules?.dayShift ?? (state.accountView==="ATLAS"?0:state.accountView==="IFPRO"?7200:DAY_SHIFT);
+  if(Object.keys(allAcc).length) html+=dashboardToolbar(allAcc);
   if(logins.length){
     const totalEq=logins.reduce((s,l)=>s+(acc[l].info?.equity||0),0);
     const totalTodayPL=logins.reduce((s,l)=>s+(acc[l].metrics?.periods?.[0]?.profit||0),0);
@@ -809,13 +871,24 @@ function render(){
     const allCur=acc[logins[0]].info?.currency||"USD";
     html+=`<div class="chips">`;
     html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+    const botOwnerLogin=Object.keys(acc).find(l=>acc[l]?.botMetrics?.trades>0 && /thor/i.test(acc[l]?.info?.label||""));
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,a.info?.label||l,fmtMoney(a.info?.equity,a.info?.currency),
         PALETTE[i%PALETTE.length],(a.metrics?.dailyGrowth||[]).slice(-30).map(g=>g.balance),stale,
-        a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null); });
+        a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null);
+      if(l===botOwnerLogin) html+=botTileHTML(a.botMetrics,a.info?.currency||"USD");
+    });
     html+=`</div>`;
     if(state.selected==="ALL") html+=overviewHTML(acc);
+    else if(state.selected==="BOT:THUNDERBOLT" && botOwnerLogin){
+      const owner=acc[botOwnerLogin], botAccount={...owner,metrics:owner.botMetrics};
+      html+=tabsHTML();
+      let tabHtml;
+      try { tabHtml=accountTabHTML("Thunderbolt",botAccount,"#F59E6C"); }
+      catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
+      html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
+    }
     else if(acc[state.selected]){
       const color=PALETTE[logins.indexOf(state.selected)%PALETTE.length];
       html+=tabsHTML();
@@ -825,10 +898,39 @@ function render(){
       html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
     }
   } else if(!state.error&&!state.needsAuth){
-    html+=`<div class="panel loading pulse">Connecting to your database…</div>`;
+    html+=Object.keys(allAcc).length
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
   const si=$("#secretInput"); if(si) si.addEventListener("keydown",e=>{if(e.key==="Enter")saveSecret();});
+}
+
+function botTileHTML(m,cur){
+  const today=m?.periods?.[0]?.profit??null, total=m?.profit??null;
+  return `<button class="chip ${state.selected==="BOT:THUNDERBOLT"?"active":""}" onclick="selectAcct('BOT:THUNDERBOLT')">
+    <div class="cl"><span class="dot" style="background:#F59E6C"></span><span class="nm">Thunderbolt</span></div>
+    <div class="eq">${fmtMoney(total,cur)}</div>
+    ${today!=null?`<div class="mono" style="font-size:14px;font-weight:600;color:${sColor(today)};margin-top:5px;text-align:center">Today P/L ${fmtMoney(today,cur)}</div>`:""}
+    <div class="mono" style="font-size:12px;color:var(--mute);margin-top:5px;text-align:center">Tbolts • INV • M5</div>
+  </button>`;
+}
+
+function dashboardToolbar(allAcc){
+  const counts={ALL:Object.keys(allAcc).length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0};
+  Object.values(allAcc).forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  return `<div class="dashboard-toolbar">
+    <div class="dashboard-switch">
+      <label for="accountView">Dashboard</label>
+      <select id="accountView" onchange="setAccountView(this.value)">
+        <option value="ALL" ${state.accountView==="ALL"?"selected":""}>All accounts (${counts.ALL})</option>
+        <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
+        <option value="DEMO" ${state.accountView==="DEMO"?"selected":""}>MetaQuotes Demo (${counts.DEMO})</option>
+      </select>
+    </div>
+    <span class="dashboard-context">${label} • choose an account tile below for detailed analytics</span>
+  </div>`;
 }
 
 function chipHTML(id,label,value,color,sparkPts,stale,todayPL=null,cur="USD",totalPL=null){
@@ -1232,7 +1334,7 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
     </div>
     <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TMP = maximum net realized profit reached during that trading day; the timestamp is shown below the value.</div>
     <div class="tblwrap"><table>
-      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Max floating profit</th><th>Max floating loss</th><th>TMP</th><th>Day's profit</th><th>Max drawdown</th><th>Day's drawdown</th><th>Overall profit</th></tr>
+      <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>Max floating profit</th><th>Max floating loss</th><th>TMP</th><th>Day's profit</th><th>Max drawdown</th><th>Day's drawdown</th><th>Overall profit</th></tr>
       ${days.length?days.map(d=>{
         const s=balanceForDay(m,d.start);
         const fl=dailyFloating?.[d.key]||{};
@@ -1250,6 +1352,8 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:${hiColor}"><div>${fmtMoney(s.todayHighBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${tmStr(s.todayHighAt)}</div></td>
           <td style="color:${lowColor}"><div>${fmtMoney(s.todayLowBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${tmStr(s.todayLowAt)}</div></td>
           <td style="color:var(--text)"><div>${fmtMoney(s.highestBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${dtStr(s.highestBalAt)}</div></td>
+          <td style="color:var(--brass)">${fmtMoney(fl.baseline,cur)}<div style="font-size:10px;color:var(--dim);font-family:inherit">${fl.baselineAt!=null?"at "+dtStr(fl.baselineAt):""}</div></td>
+          <td style="color:${fl.breach?"var(--down)":"var(--mute)"}">${fmtMoney(fl.floor,cur)}${fl.breach?"<div style=\"font-size:10px\">BREACH</div>":""}</td>
           <td style="color:var(--up)">${fmtMoney(fl.maxProfit,cur)}</td>
           <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
           <td style="color:${sColor(maxProfit)}"><div>${fmtMoney(maxProfit,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${maxProfitAt!=null?"at "+dtStr(maxProfitAt):""}</div></td>
@@ -1257,7 +1361,7 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
           <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td>
           <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td></tr>`;
-      }).join(""):`<tr><td colspan="13" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
+      }).join(""):`<tr><td colspan="15" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
     </table></div>
   </div>`;
 }
@@ -1801,12 +1905,12 @@ function sessionOf(unix){
   if(istMin>=1260 && istMin<1410) return "US_LATE";  // 21:00–23:30 IST
   return "SYD";                                      // 23:30–06:00 IST
 }
-function istDayStartUnix(){ // trading-day start: most recent 02:30 IST (21:00 UTC)
+function istDayStartUnix(shift=activeDayShift){ // trading-day start using the active account profile
   const nowU=Math.floor(Date.now()/1000);
-  return Math.floor((nowU+DAY_SHIFT)/86400)*86400-DAY_SHIFT; }
-function dateStrToUnix(str){ // yyyy-mm-dd trading day: starts 02:30 IST of that date
+  return Math.floor((nowU+shift)/86400)*86400-shift; }
+function dateStrToUnix(str,shift=activeDayShift){ // yyyy-mm-dd trading day using the active account profile
   if(!str) return null; const [y,m,d]=str.split("-").map(Number);
-  return Date.UTC(y,m-1,d)/1000-DAY_SHIFT; }
+  return Date.UTC(y,m-1,d)/1000-shift; }
 function tradeInWindow(t,from,to){
   const inRange=u=>u!=null&&(from==null||u>=from)&&(to==null||u<to);
   return inRange(t.openTime)||inRange(t.closeTime);
@@ -1970,6 +2074,13 @@ function aFilterBar(m){
 }
 window.setAFilter=(k,v)=>{ state[k]=v; render(); };
 window.setFilter=(k,v)=>{ state[k]=v; state.tradesShown=50; render(); };
+window.setAccountView=view=>{
+  state.accountView=view;
+  state.selected="ALL";
+  state.tab="overview";
+  localStorage.setItem("fxdesk_account_view",view);
+  render();
+};
 window.filterSymbol=sym=>{ state.fSymbol=sym; state.fExit="ALL"; state.tab="trades"; state.tradesShown=50; render(); };
 window.selectAcct=id=>{state.selected=id;state.tab="overview";state.tradesShown=50;state.fSymbol="ALL";state.fExit="ALL";state.fDays=0;state.fFrom="";state.fTo="";state.fComment="ALL";state.aSymbol="ALL";state.aPreset="ALL";state.anSymbol="ALL";state.anPreset="LAST5";state.anFrom="";state.anTo="";state.anLarge=false;state.balanceMonth="ALL";state.tpSymbol="ALL";state.tpPreset="TODAY";state.tpFrom="";state.tpTo="";state.customFrom="";state.customTo="";render();};
 window.selectTab=t=>{state.tab=t;render();};
