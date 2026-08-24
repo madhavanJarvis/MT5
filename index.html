@@ -79,6 +79,12 @@ tr:last-child td{border-bottom:none}
 .tblscroll-top{overflow-x:auto;overflow-y:hidden;height:14px;margin:0 0 4px;border-bottom:1px solid var(--line)}
 .tblscroll-top>div{height:1px;min-width:1600px}
 .daily-balances-table{width:max-content;min-width:1600px}
+.daily-expand{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:6px;padding:0;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--brass);font:600 15px/1 inherit;cursor:pointer;vertical-align:middle}
+.daily-expand:hover{border-color:var(--brass);background:#F7F9FE}
+.daily-detail>td{padding:12px 14px;background:#F7F9FE;text-align:left}
+.daily-detail-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
+.daily-detail .tblwrap{background:#fff;border:1px solid var(--line);border-radius:10px}
+.daily-detail table{font-size:12px}
 .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px}
 .bar-track{flex:1;height:9px;background:#EEF1FA;border-radius:5px;overflow:hidden}
 .bar-fill{height:100%;border-radius:5px}
@@ -218,7 +224,7 @@ let state = {
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
   anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anLarge:false,
-  balanceMonth:"ALL",
+  balanceMonth:"ALL", dailyExpanded:{},
   tpSymbol:"ALL", tpPreset:"TODAY", tpFrom:"", tpTo:"",
   customFrom:"", customTo:"",
   wlPreset:"ALL", wlFrom:"", wlTo:"",
@@ -1362,12 +1368,14 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
         const dayProfit=m.dailyProfit?.[d.key]??0;
         const maxProfit=m.dailyMaxProfit?.[d.key];
         const maxProfitAt=m.dailyMaxProfitAt?.[d.key];
+        const dayTrades=m.allTrades.filter(t=>t.closeTime!=null&&t.closeTime>=d.start&&t.closeTime<d.start+86400);
+        const expanded=!!state.dailyExpanded[d.key];
         const overallProfit=m.allTrades.filter(t=>t.closeTime!=null&&t.closeTime<d.start+86400).reduce((sum,t)=>sum+t.profit,0);
         const maxDD=m.dailyMaxDD?.[d.key]??0, maxDDMoney=m.dailyMaxDDMoney?.[d.key]??0;
         const dayDD=m.dailyDD?.[d.key]??0, dayDDMoney=m.dailyDDMoney?.[d.key]??0;
         const hiColor=s.todayHighBal!=null&&s.prevDayEOD!=null&&(s.todayHighBal-s.prevDayEOD)>=0?"var(--up)":"var(--down)";
         const lowColor=s.todayLowBal!=null&&s.prevDayEOD!=null&&(s.todayLowBal-s.prevDayEOD)<=0?"var(--down)":"var(--up)";
-        return `<tr class="mono"><td style="color:var(--brass);font-weight:600">${esc(d.key)}</td>
+        return `<tr class="mono"><td style="color:var(--brass);font-weight:600"><button class="daily-expand" onclick="toggleDailyBalanceDay('${esc(d.key)}')" aria-expanded="${expanded}">${expanded?"−":"+"}</button>${esc(d.key)}</td>
           <td style="color:var(--text)">${fmtMoney(s.balance,cur)}</td>
           <td style="color:var(--mute)"><div>${fmtMoney(s.prevDayEOD,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">as of ${dtStr(s.prevDayEODAt)}</div></td>
           <td style="color:${hiColor}"><div>${fmtMoney(s.todayHighBal,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">at ${tmStr(s.todayHighAt)}</div></td>
@@ -1381,7 +1389,7 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:var(--up)">${fmtMoney(fl.maxProfit,cur)}</td>
           <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
           <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
-          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>`;
+          <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>${expanded?`<tr class="daily-detail"><td colspan="15"><div class="daily-detail-title">${esc(d.key)} · symbol breakdown</div>${symbolStatsTable(dayTrades,cur,{showPips:false,interactive:false})}</td></tr>`:""}`;
       }).join(""):`<tr><td colspan="15" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
     </table></div>
   </div>`;
@@ -2094,6 +2102,7 @@ function aFilterBar(m){
   </div>`;
 }
 window.setAFilter=(k,v)=>{ state[k]=v; render(); };
+window.toggleDailyBalanceDay=key=>{ state.dailyExpanded[key]=!state.dailyExpanded[key]; render(); };
 window.setFilter=(k,v)=>{ state[k]=v; state.tradesShown=50; render(); };
 window.setAccountView=view=>{
   state.accountView=view;
