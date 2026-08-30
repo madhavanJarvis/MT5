@@ -197,16 +197,23 @@ const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
 const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
-const ACCOUNT_TILE_ORDER = ["tb", "thor", "drdoom", "marvel2m", "marvel3m", "atlas"];
+const ACCOUNT_TILE_ORDER = ["s1r", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
 const tileLabelKey = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function orderedTileLogins(accounts){
-  return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login)}))
+  return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login), equity: accounts[login]?.info?.equity}))
     .sort((a,b) => {
-      const rank = label => {
+      const rank = item => {
+        const label=item.label;
+        if(label === "s1r") return 0;
+        if(label === "ema40") return 1;
+        if(label.startsWith("thor") && Math.abs(Number(item.equity)-49089.60)<0.01) return 100;
+        if(label.startsWith("drdoom") && Math.abs(Number(item.equity)-41677.52)<0.01) return 101;
+        if(label.startsWith("ema40source")) return 5;
+        if(label.startsWith("atlas")) return 102;
         const found = ACCOUNT_TILE_ORDER.findIndex(order => label === order || label.startsWith(order));
-        return found < 0 ? ACCOUNT_TILE_ORDER.length : found;
+        return found < 0 ? 50 : found;
       };
-      return rank(a.label) - rank(b.label) || a.index - b.index;
+      return rank(a) - rank(b) || a.index - b.index;
     }).map(item => item.login);
 }
 const instrumentName = item => typeof item === "string" ? item : (item?.symbol ?? item?.sym ?? "");
@@ -223,7 +230,7 @@ let state = {
   lastUpdate:null, showSettings:false, tradesShown:50,
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
-  anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anLarge:false,
+  anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anComment:"ALL", anLarge:false,
   balanceMonth:"ALL", dailyExpanded:{},
   tpSymbol:"ALL", tpPreset:"TODAY", tpFrom:"", tpTo:"",
   customFrom:"", customTo:"",
@@ -248,14 +255,30 @@ function accountsForView(accounts){
   if(state.accountView==="ALL") scoped=accounts||{};
   else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)!=="DEMO"));
   else scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)===state.accountView));
-  return Object.fromEntries(Object.entries(scoped).map(([login,a])=>[
-    login,
-    /thor/i.test(a?.info?.label||"") ? {
+  const out={};
+  Object.entries(scoped).forEach(([login,a])=>{
+    const label=String(a?.info?.label||login);
+    if(accountType(a)==="IFPRO") return;
+    if(/^marvel\s*2m/i.test(label)) return;
+    if(tileLabelKey(label)==="ema40" && Array.isArray(a.deals)){
+      const makeBotView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        return {...a, info:{...a.info,label:viewLabel,equity}, metrics, positions, deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      };
+      out[login]=makeBotView(comment=>/3006/.test(String(comment||"")),label);
+      out[`${login}:S1R`]=makeBotView(comment=>/s\s*1\s*[-_]?\s*r/i.test(String(comment||"")),"S1R");
+      return;
+    }
+    out[login]=/thor/i.test(label) ? {
       ...a,
       metrics:a.metricsWithoutThunderbolt||a.metrics,
       positions:(a.positions||[]).filter(p=>!String(p?.comment||"").startsWith("Tbolts|INV|M5|"))
-    } : a
-  ]));
+    } : a;
+  });
+  return out;
 }
 
 /* ============ HELPERS ============ */
@@ -327,7 +350,7 @@ function realizedDayExtremes(trades,start,end){
 }
 
 /* ============ METRICS ENGINE v2 ============ */
-function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null){
+function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null,commentMatcher=null){
   const dayShift=rules.dayShift??DAY_SHIFT;
   const metricDayKey=u=>dayKey(u,dayShift);
   const metricDayStart=()=>{const nowU=Math.floor(Date.now()/1000);return Math.floor((nowU+dayShift)/86400)*86400-dayShift;};
@@ -335,6 +358,10 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   if(botPrefix){
     const botPositions=new Set(source.filter(d=>d.ty!==2&&String(d.cm||"").startsWith(botPrefix)).map(d=>String(d.id||"")));
     source=source.filter(d=>d.ty!==2&&botPositions.has(String(d.id||"")));
+  }
+  if(commentMatcher){
+    const botPositions=new Set(source.filter(d=>d.ty!==2&&commentMatcher(d.cm)).map(d=>String(d.id||"")));
+    source=source.filter(d=>d.ty===2||botPositions.has(String(d.id||"")));
   }
   if(excludeBotPrefix){
     const excludedPositions=new Set(source.filter(d=>d.ty!==2&&String(d.cm||"").startsWith(excludeBotPrefix)).map(d=>String(d.id||"")));
@@ -679,7 +706,7 @@ function normalizeAccount(a){
       closeTime:utcTime(r.closeTime,serverOff),
       updatedAt:utcTime(r.updatedAt,serverOff)};
   });
-  return {info,orders,positions,dailyFloating,tpSlHistory,rules,
+  return {info,orders,positions,dailyFloating,tpSlHistory,rules,deals,
     metrics:computeMetrics(deals,rules),
     metricsWithoutThunderbolt:computeMetrics(deals,rules,null,"Tbolts|INV|M5|"),
     botMetrics:computeMetrics(deals,rules,"Tbolts|INV|M5|"),
@@ -937,8 +964,9 @@ function botTileHTML(m,cur){
 }
 
 function dashboardToolbar(allAcc){
-  const counts={ALL:Object.keys(allAcc).length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0};
-  Object.values(allAcc).forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
+  const dashboardAccounts=Object.values(allAcc).filter(a=>accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0};
+  dashboardAccounts.forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
   const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
@@ -1503,6 +1531,7 @@ function analysisScopeLabel(){
 }
 function analysisFilterControls(m){
   const syms=[...new Set(m.allTrades.map(t=>t.symbol).filter(Boolean))].sort(compareInstruments);
+  const comments=[...new Set(m.allTrades.map(t=>t.comment||"(none)"))].sort((a,b)=>a.localeCompare(b));
   return `<div style="display:flex;gap:8px;flex-wrap:nowrap;align-items:center;white-space:nowrap;flex:0 0 auto">
       <span style="font-size:12px;color:var(--dim)">Instrument</span>
       <select style="max-width:170px" onchange="setAFilter('anSymbol',this.value)">
@@ -1518,11 +1547,17 @@ function analysisFilterControls(m){
         <input type="date" style="max-width:145px" value="${esc(state.anFrom)}" onchange="setAFilter('anFrom',this.value)">
         <span style="color:var(--dim);font-size:12px">to</span>
         <input type="date" style="max-width:145px" value="${esc(state.anTo)}" onchange="setAFilter('anTo',this.value)">`:""}
+      <span style="font-size:12px;color:var(--dim);margin-left:4px">Comment</span>
+      <select style="max-width:190px" onchange="setAFilter('anComment',this.value)">
+        <option value="ALL" ${state.anComment==="ALL"?"selected":""}>All comments</option>
+        ${comments.map(c=>`<option value="${esc(c)}" ${state.anComment===c?"selected":""}>${esc(c)}</option>`).join("")}
+      </select>
   </div>`;
 }
 function analysisTradesForWindow(m,from,to){
   let tr=m.allTrades.slice().sort((a,b)=>(a.closeTime??0)-(b.closeTime??0));
   if(state.anSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.anSymbol);
+  if(state.anComment!=="ALL") tr=tr.filter(t=>(t.comment||"(none)")===state.anComment);
   if(from!=null||to!=null){
     const inRange=u=>u!=null&&(from==null||u>=from)&&(to==null||u<to);
     tr=tr.filter(t=>inRange(t.closeTime)||inRange(t.openTime));
@@ -1547,6 +1582,7 @@ function analysisOpenTimeTrades(m){
   const {from,to}=analysisWindow();
   let tr=m.allTrades.slice().sort((a,b)=>(a.closeTime??0)-(b.closeTime??0));
   if(state.anSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.anSymbol);
+  if(state.anComment!=="ALL") tr=tr.filter(t=>(t.comment||"(none)")===state.anComment);
   if(from!=null||to!=null){
     tr=tr.filter(t=>t.openTime!=null&&(from==null||t.openTime>=from)&&(to==null||t.openTime<to));
   }
@@ -1779,7 +1815,6 @@ function tabTrades(m,a,cur){
         <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.fTo)}" onchange="setFilter('fTo',this.value)">`:""}
       ${(()=>{
         const cms=[...new Set(m.allTrades.map(t=>t.comment||"(none)"))].sort();
-        if(cms.length<2||cms.length>40) return "";
         return `<select style="max-width:190px" onchange="setFilter('fComment',this.value)">
           <option value="ALL" ${state.fComment==="ALL"?"selected":""}>All comments</option>
           ${cms.map(c=>`<option value="${esc(c)}" ${state.fComment===c?"selected":""}>${esc(c)}</option>`).join("")}
@@ -2133,7 +2168,7 @@ window.setAccountView=view=>{
   render();
 };
 window.filterSymbol=sym=>{ state.fSymbol=sym; state.fExit="ALL"; state.tab="trades"; state.tradesShown=50; render(); };
-window.selectAcct=id=>{state.selected=id;state.tab="overview";state.tradesShown=50;state.fSymbol="ALL";state.fExit="ALL";state.fDays=0;state.fFrom="";state.fTo="";state.fComment="ALL";state.aSymbol="ALL";state.aPreset="ALL";state.anSymbol="ALL";state.anPreset="LAST5";state.anFrom="";state.anTo="";state.anLarge=false;state.balanceMonth="ALL";state.tpSymbol="ALL";state.tpPreset="TODAY";state.tpFrom="";state.tpTo="";state.customFrom="";state.customTo="";render();};
+window.selectAcct=id=>{state.selected=id;state.tab="overview";state.tradesShown=50;state.fSymbol="ALL";state.fExit="ALL";state.fDays=0;state.fFrom="";state.fTo="";state.fComment="ALL";state.aSymbol="ALL";state.aPreset="ALL";state.anSymbol="ALL";state.anPreset="LAST5";state.anFrom="";state.anTo="";state.anComment="ALL";state.anLarge=false;state.balanceMonth="ALL";state.tpSymbol="ALL";state.tpPreset="TODAY";state.tpFrom="";state.tpTo="";state.customFrom="";state.customTo="";render();};
 window.selectTab=t=>{state.tab=t;render();};
 window.toggleAnalysisZoom=()=>{state.anLarge=!state.anLarge;render();};
 window.showMoreTrades=()=>{state.tradesShown+=50;render();};
