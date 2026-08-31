@@ -197,7 +197,7 @@ const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
 const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
-const ACCOUNT_TILE_ORDER = ["s1r", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
+const ACCOUNT_TILE_ORDER = ["s1r", "m", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
 const tileLabelKey = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function orderedTileLogins(accounts){
   return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login), equity: accounts[login]?.info?.equity}))
@@ -270,6 +270,7 @@ function accountsForView(accounts){
       };
       out[login]=makeBotView(comment=>/3006/.test(String(comment||"")),label);
       out[`${login}:S1R`]=makeBotView(comment=>/s\s*1\s*[-_]?\s*r/i.test(String(comment||"")),"S1R");
+      out[`${login}:M`]=makeBotView(comment=>/^m/i.test(String(comment||"")),"M");
       return;
     }
     out[login]=/thor/i.test(label) ? {
@@ -921,7 +922,7 @@ function render(){
     html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
-      html+=chipHTML(l,a.info?.label||l,fmtMoney(a.info?.equity,a.info?.currency),
+      html+=chipHTML(l,tileAccountLabel(a.info?.label||l,l),fmtMoney(a.info?.equity,a.info?.currency),
         PALETTE[i%PALETTE.length],(a.metrics?.dailyGrowth||[]).slice(-30).map(g=>g.balance),stale,
         a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null);
     });
@@ -979,6 +980,12 @@ function dashboardToolbar(allAcc){
     </div>
     <span class="dashboard-context">${label} • choose an account tile below for detailed analytics</span>
   </div>`;
+}
+
+function tileAccountLabel(label,id){
+  const base=String(id||"").split(":")[0];
+  const digits=(String(base).match(/\d/g)||[]).join("");
+  return digits.length>=4 ? `${label} • ${digits.slice(-4)}` : label;
 }
 
 function chipHTML(id,label,value,color,sparkPts,stale,todayPL=null,cur="USD",totalPL=null){
