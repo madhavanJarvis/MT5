@@ -206,6 +206,7 @@ function orderedTileLogins(accounts){
         const label=item.label;
         if(label === "s1r") return 0;
         if(label === "ema40") return 1;
+        if(label.startsWith("thorsltp")) return 100;
         if(label.startsWith("thor") && Math.abs(Number(item.equity)-49089.60)<0.01) return 100;
         if(label.startsWith("drdoom") && Math.abs(Number(item.equity)-41677.52)<0.01) return 101;
         if(label.startsWith("ema40source")) return 5;
@@ -273,11 +274,22 @@ function accountsForView(accounts){
       out[`${login}:M`]=makeBotView(comment=>/^m/i.test(String(comment||"")),"M");
       return;
     }
-    out[login]=/thor/i.test(label) ? {
-      ...a,
-      metrics:a.metricsWithoutThunderbolt||a.metrics,
-      positions:(a.positions||[]).filter(p=>!String(p?.comment||"").startsWith("Tbolts|INV|M5|"))
-    } : a;
+    if(/thor/i.test(label)){
+      const thorView={
+        ...a,
+        metrics:a.metricsWithoutThunderbolt||a.metrics,
+        positions:(a.positions||[]).filter(p=>!String(p?.comment||"").startsWith("Tbolts|INV|M5|"))
+      };
+      out[login]=thorView;
+      if(String(login).endsWith("4757") && Array.isArray(a.deals)){
+        const matcher=comment=>String(comment||"").startsWith("ThorSLTP");
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        out[`${login}:ThorSLTP`]={...a,info:{...a.info,label:"ThorSLTP",equity},metrics,positions,deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      }
+    } else out[login]=a;
   });
   return out;
 }
@@ -351,6 +363,13 @@ function realizedDayExtremes(trades,start,end){
 }
 
 /* ============ METRICS ENGINE v2 ============ */
+const STANDARD_COMMISSION_PER_LOT = 5;
+function standardCommissionFor(symbol,lots){
+  const s=String(symbol||"").toUpperCase();
+  const isMetal=/^XA[UG]USD$|^XA[UG][A-Z]{3}$/.test(s);
+  const isForex=/^[A-Z]{6}$/.test(s) && !/^X[A-Z]{4}$/.test(s);
+  return isMetal||isForex ? -(Number(lots)||0)*STANDARD_COMMISSION_PER_LOT : 0;
+}
 function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null,commentMatcher=null){
   const dayShift=rules.dayShift??DAY_SHIFT;
   const metricDayKey=u=>dayKey(u,dayShift);
@@ -406,7 +425,9 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     if(P.closeTime==null) continue; // still open or orphan
     const openPrice = P.volume>0 && P.wOpen>0 ? P.wOpen/P.volume : null;
     const closePrice = P.closedVol>0 && P.wClose>0 ? P.wClose/P.closedVol : null;
-    const net = P.profit + P.commission + P.swap;
+    const standardCommission=standardCommissionFor(P.symbol,P.volume||P.closedVol);
+    const commission=P.commission+standardCommission;
+    const net = P.profit + commission + P.swap;
     let pips=null;
     if(openPrice!=null && closePrice!=null && P.symbol){
       const ps=pipSize(P.symbol);
@@ -414,7 +435,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     }
     trades.push({symbol:P.symbol, dir:P.dir||"—", volume:P.volume||P.closedVol,
       openTime:P.openTime, closeTime:P.closeTime, openPrice, closePrice,
-      profit:net, rawProfit:P.profit, commission:P.commission, swap:P.swap, pips,
+      profit:net, rawProfit:P.profit, commission, standardCommission, swap:P.swap, pips,
       exit: P.slHit?"SL":P.tpHit?"TP":P.soHit?"SO":"Manual",
       comment: P.comment || P.commentOut || "",
       duration: P.openTime!=null ? P.closeTime-P.openTime : null});
@@ -422,6 +443,8 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   trades.sort((a,b)=>a.closeTime-b.closeTime);
   const todayStart=metricDayStart();
   const todayExtremes=realizedDayExtremes(trades,todayStart,todayStart+86400);
+  const commissionByTime={};
+  trades.forEach(t=>{ if(t.standardCommission) commissionByTime[t.closeTime]=(commissionByTime[t.closeTime]||0)+t.standardCommission; });
 
   const grossProfit = trades.reduce((s,t)=>s+(t.rawProfit||0),0);
   const tradeProfit = trades.reduce((s,t)=>s+t.profit,0); // gross profit + signed commission + swap
@@ -438,7 +461,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   const dailyMaxDD = new Map(), dailyMaxDDMoney = new Map();
   let twr=1, monthStartBal={}, growthByDay=new Map();
   for(const d of deals){
-    const net = (d.p||0)+(d.c||0)+(d.sw||0);
+    const net = (d.p||0)+(d.c||0)+(d.sw||0)+(commissionByTime[d.t]||0);
     const isTrade = d.ty!==2;
     const balBefore = bal;
     // TWR: only chain trading returns, deposits change base without return
@@ -1087,7 +1110,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)+
       stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap")+
       stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
-      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"signed MT5 cost")+
+      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"includes standard $5/lot for FX/metals")+
       stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
       '</div>';
   }
@@ -1109,7 +1132,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       ${stat("Day's low",fmtMoney(s.todayLowBal,cur),lowColor,lowTime)}
       ${stat("All-time high",fmtMoney(s.highestBal,cur),null,allHighTime)}
       ${showSwap?stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap"):""}
-      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"signed MT5 cost")}
+      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"includes standard $5/lot for FX/metals")}
       ${showSwap?stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost"):""}
       ${showSwap?"":stat("Total P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))}
       ${showDailyExtremes?stat("MPD (max day profit)",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime):""}
@@ -1139,7 +1162,7 @@ function overviewBalancePanel(a,cur){
     stat("TML",fmtMoney(m.mld,cur),sColor(m.mld),m.mldAt!=null?"at "+dtStr(m.mldAt):"")+
     stat("Profit",fmtMoney(m.grossProfit,cur),sColor(m.grossProfit),"before commission and swap")+
     stat("Swap",fmtMoney(m.totalSwap,cur),sColor(m.totalSwap),"signed MT5 cost")+
-    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),"signed MT5 cost")+
+    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),"includes standard $5/lot for FX/metals")+
     stat("Final P/L",fmtMoney(overallFinal,cur),sColor(overallFinal))+
     '</div></div>';
 }
