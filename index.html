@@ -197,7 +197,7 @@ const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
 const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
-const ACCOUNT_TILE_ORDER = ["s1r", "m", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
+const ACCOUNT_TILE_ORDER = ["s1r", "m", "9192reverse", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
 const tileLabelKey = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function orderedTileLogins(accounts){
   return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login), equity: accounts[login]?.info?.equity}))
@@ -205,7 +205,9 @@ function orderedTileLogins(accounts){
       const rank = item => {
         const label=item.label;
         if(label === "s1r") return 0;
-        if(label === "ema40") return 1;
+        if(label === "m") return 1;
+        if(label === "9192reverse") return 2;
+        if(label === "ema40") return 3;
         if(label.startsWith("thorsltp")) return 100;
         if(label.startsWith("thor") && Math.abs(Number(item.equity)-49089.60)<0.01) return 100;
         if(label.startsWith("drdoom") && Math.abs(Number(item.equity)-41677.52)<0.01) return 101;
@@ -227,7 +229,7 @@ const compareInstruments = (a,b) => {
 
 const savedAccountView=localStorage.getItem("fxdesk_account_view");
 let state = {
-  accounts:null, error:null, needsAuth:false, selected:"ALL", accountView:(savedAccountView==="ATLAS"||savedAccountView==="IFPRO")?"PROP":(savedAccountView||"ALL"), botView:"ALL", tab:"overview",
+  accounts:null, error:null, needsAuth:false, selected:"ALL", accountView:(savedAccountView==="ATLAS"||savedAccountView==="IFPRO")?"PROP":(savedAccountView==="ATTACHED"?"VIRAJITH":(savedAccountView||"ALL")), botView:"ALL", tab:"overview",
   lastUpdate:null, showSettings:false, tradesShown:50,
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
@@ -251,10 +253,17 @@ function accountType(a){
   if(/prop|ftmo|funded|funding|the5ers|topstep|apex|maven|myfunded|mentfunding|challenge/.test(text)) return "PROP";
   return "PROP";
 }
+const ATTACHED_ACCOUNT_SUFFIXES = new Set(["8769", "3006", "7239", "9192", "0291", "9017"]);
+function isAttachedAccount(login){
+  const digits=(String(login||"").match(/\d/g)||[]).join("");
+  return digits.length>=4 && ATTACHED_ACCOUNT_SUFFIXES.has(digits.slice(-4));
+}
 function accountsForView(accounts){
   let scoped;
   if(state.accountView==="ALL") scoped=accounts||{};
   else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)!=="DEMO"));
+  else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
+  else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
   else scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)===state.accountView));
   const out={};
   Object.entries(scoped).forEach(([login,a])=>{
@@ -272,6 +281,7 @@ function accountsForView(accounts){
       out[login]=makeBotView(comment=>/3006/.test(String(comment||"")),label);
       out[`${login}:S1R`]=makeBotView(comment=>/s\s*1\s*[-_]?\s*r/i.test(String(comment||"")),"S1R");
       out[`${login}:M`]=makeBotView(comment=>/^m/i.test(String(comment||"")),"M");
+      if(/9017$/.test(String(login))) out[`${login}:Reverse`]=makeBotView(comment=>/^Reverse/i.test(String(comment||""))||/9192/i.test(String(comment||"")),"9192 Reverse");
       return;
     }
     if(/thor/i.test(label)){
@@ -961,7 +971,7 @@ function render(){
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -989,15 +999,22 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.values(allAcc).filter(a=>accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0,VIRAJITH:0,MADHAVAN:0};
+  Object.entries(allAcc).forEach(([login,a])=>{
+    const visible=accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
+    if(!visible) return;
+    if(isAttachedAccount(login)) counts.VIRAJITH++; else counts.MADHAVAN++;
+  });
   dashboardAccounts.forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
       <select id="accountView" onchange="setAccountView(this.value)">
         <option value="ALL" ${state.accountView==="ALL"?"selected":""}>All accounts (${counts.ALL})</option>
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
+        <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
+        <option value="MADHAVAN" ${state.accountView==="MADHAVAN"?"selected":""}>Madhavan (${counts.MADHAVAN})</option>
         <option value="DEMO" ${state.accountView==="DEMO"?"selected":""}>MetaQuotes Demo (${counts.DEMO})</option>
       </select>
     </div>
