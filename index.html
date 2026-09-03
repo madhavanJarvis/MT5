@@ -171,6 +171,20 @@ input:focus,select:focus{border-color:var(--brass);background:rgba(255,255,255,.
   .sp3,.sp4,.sp5,.sp6,.sp7,.sp8{grid-column:span 12!important}
   .stat .val{font-size:18px}
 }
+/* ---- Live positions page ---- */
+.icobtn.navbtn{font-weight:600;letter-spacing:.02em}
+.icobtn.navbtn.active{background:var(--grad-blue);color:#fff;border-color:transparent;box-shadow:0 6px 18px rgba(79,125,240,.28)}
+.pmtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.pmtile{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;min-width:0}
+.pmtile .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:600;margin-bottom:6px}
+.pmtile .val{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pmtile .sub{font-size:12px;color:var(--mute);margin-top:3px}
+.expo-bar{position:relative;height:8px;border-radius:4px;background:var(--panel-up);min-width:90px}
+.expo-bar>span{position:absolute;top:0;bottom:0;border-radius:4px}
+.pmsort{display:inline-flex;gap:6px;flex-wrap:wrap}
+.pmsort button{background:#fff;border:1px solid var(--line);border-radius:8px;color:var(--mute);cursor:pointer;padding:6px 11px;font-size:12px;font-weight:600}
+.pmsort button.active{border-color:var(--brass);color:var(--brass);box-shadow:0 4px 12px rgba(79,125,240,.14)}
+.acctpill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--panel-up);color:var(--text);border:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -178,16 +192,17 @@ input:focus,select:focus{border-color:var(--brass);background:rgba(255,255,255,.
   <div class="brand">
     <span style="color:var(--brass);font-size:18px">▤</span>
     <div><h1 class="disp">FX Desk <span style="color:var(--brass)">Pro</span></h1>
-    <small>Multi-account MT5 • v4.92 — 22 Aug 2026</small></div>
+    <small>Multi-account MT5 • v4.93 — 03 Sep 2026</small></div>
   </div>
   <div class="hbtns">
     <div class="status" id="status"><span id="statusDot">○</span> <span class="mono" id="statusText">connecting…</span></div>
+    <button class="icobtn navbtn" id="navPositions" onclick="togglePositions()" title="Live open positions across every account">◎ Positions</button>
     <button class="icobtn" onclick="refresh(true)" title="Refresh now">⟳</button>
     <button class="icobtn" onclick="toggleSettings()" title="Settings">⚙</button>
   </div>
 </header>
 <main id="app"><div class="loading pulse">Connecting to your database…</div></main>
-<footer>FX Desk Pro v4.92 — 22 Aug 2026 • your Firebase database • published by FXDeskPublisher EA • no subscriptions</footer>
+<footer>FX Desk Pro v4.93 — 03 Sep 2026 • your Firebase database • published by FXDeskPublisher EA • no subscriptions</footer>
 
 <script>
 /* ============ CONFIG ============ */
@@ -197,17 +212,23 @@ const LS = { auth:"fxdesk_auth", refresh:"fxdesk_refresh" };
 const WEEKDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const INSTRUMENT_ORDER = ["XAUUSD","XAGUSD","EURUSD","GBPUSD","USDJPY"];
-const ACCOUNT_TILE_ORDER = ["s1r", "m", "9192reverse", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
+const ACCOUNT_TILE_ORDER = ["s1r", "m", "9192reverse", "3006copier", "ema40", "thor", "drdoom", "3006direct", "ema40source"];
 const tileLabelKey = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function orderedTileLogins(accounts){
-  return Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login), equity: accounts[login]?.info?.equity}))
+  const items=Object.keys(accounts || {}).map((login, index) => ({login, index, label: tileLabelKey(accounts[login]?.info?.label || login), equity: accounts[login]?.info?.equity}));
+  // Tiles fanned out from one login (e.g. the four 9017 EAs) must sit together, ahead of single-tile accounts.
+  const baseLogin=item=>String(item.login).split(":")[0];
+  const tilesPerBase={}; items.forEach(it=>{ const b=baseLogin(it); tilesPerBase[b]=(tilesPerBase[b]||0)+1; });
+  const fanned=item=>tilesPerBase[baseLogin(item)]>1;
+  return items
     .sort((a,b) => {
       const rank = item => {
         const label=item.label;
         if(label === "s1r") return 0;
-        if(label === "m") return 1;
+        if(label === "m" || label.startsWith("m769copier")) return 1;
         if(label === "9192reverse") return 2;
-        if(label === "ema40") return 3;
+        if(label === "ema40" || label === "3006copier") return 3;
+        if(label.startsWith("otherunmatched")) return 4;
         if(label.startsWith("thorsltp")) return 100;
         if(label.startsWith("thor") && Math.abs(Number(item.equity)-49089.60)<0.01) return 100;
         if(label.startsWith("drdoom") && Math.abs(Number(item.equity)-41677.52)<0.01) return 101;
@@ -216,7 +237,11 @@ function orderedTileLogins(accounts){
         const found = ACCOUNT_TILE_ORDER.findIndex(order => label === order || label.startsWith(order));
         return found < 0 ? 50 : found;
       };
-      return rank(a) - rank(b) || a.index - b.index;
+      // A fanned-out account's tiles travel as one block, placed where its best-ranked tile would sit.
+      const blockRank=item=>fanned(item) ? Math.min(...items.filter(i=>baseLogin(i)===baseLogin(item)).map(rank)) : rank(item);
+      return blockRank(a) - blockRank(b)
+        || ((fanned(a)||fanned(b)) ? baseLogin(a).localeCompare(baseLogin(b)) : 0)
+        || rank(a) - rank(b) || a.index - b.index;
     }).map(item => item.login);
 }
 const instrumentName = item => typeof item === "string" ? item : (item?.symbol ?? item?.sym ?? "");
@@ -231,6 +256,7 @@ const savedAccountView=localStorage.getItem("fxdesk_account_view");
 let state = {
   accounts:null, error:null, needsAuth:false, selected:"ALL", accountView:(savedAccountView==="ATLAS"||savedAccountView==="IFPRO")?"PROP":(savedAccountView==="ATTACHED"?"VIRAJITH":(savedAccountView||"ALL")), botView:"ALL", tab:"overview",
   lastUpdate:null, showSettings:false, tradesShown:50,
+  page:"dashboard", posSort:"symbol",
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
   anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anComment:"ALL", anLarge:false,
@@ -271,17 +297,28 @@ function accountsForView(accounts){
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
     if(tileLabelKey(label)==="ema40" && Array.isArray(a.deals)){
-      const makeBotView=(matcher,viewLabel)=>{
-        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+      // 9017 runs four EAs on one login; each stamps a distinct comment prefix. Match the exact
+      // prefix so every closed position lands in exactly one tile (verified 03 Sep 2026 on 308 deals).
+      const cmOf=c=>String(c||"").trim();
+      const EA_TILES=[
+        {key:login,              label:"3006 Copier",    match:c=>/^3006_M:/i.test(cmOf(c))},      // 3006 inverse copier, magic 990306
+        {key:`${login}:S1R`,     label:"S1R",            match:c=>/^S[12]-/i.test(cmOf(c))},       // S1R_NewEA scenario tags: S1-R-newEA, S1-T, S2-B
+        {key:`${login}:M`,       label:"M (769 Copier)", match:c=>/^M:/i.test(cmOf(c))},           // 769 inverse copier, magic 990901
+        {key:`${login}:Reverse`, label:"9192 Reverse",   match:c=>/^9192-Reverse/i.test(cmOf(c))}, // 9192-Reverse BabyFinal inverse EAs
+      ];
+      const makeBotView=(matcher,viewLabel,dealsSrc=a.deals)=>{
+        const metrics=computeMetrics(dealsSrc,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
         const totalProfit=a.metrics?.profit||0;
         const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        return {...a, info:{...a.info,label:viewLabel,equity}, metrics, positions, deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+        return {...a, info:{...a.info,label:viewLabel,equity}, metrics, positions, deals:dealsSrc.filter(d=>d.ty===2||matcher(d.cm))};
       };
-      out[login]=makeBotView(comment=>/3006/.test(String(comment||"")),label);
-      out[`${login}:S1R`]=makeBotView(comment=>/s\s*1\s*[-_]?\s*r/i.test(String(comment||"")),"S1R");
-      out[`${login}:M`]=makeBotView(comment=>/^m/i.test(String(comment||"")),"M");
-      if(/9017$/.test(String(login))) out[`${login}:Reverse`]=makeBotView(comment=>/^Reverse/i.test(String(comment||""))||/9192/i.test(String(comment||"")),"9192 Reverse");
+      EA_TILES.forEach(t=>{ out[t.key]=makeBotView(t.match,t.label); });
+      // Safety net: a position no EA prefix claims gets its own tile instead of silently vanishing.
+      const claimedIds=new Set(a.deals.filter(d=>d.ty!==2&&EA_TILES.some(t=>t.match(d.cm))).map(d=>String(d.id||"")));
+      const otherDeals=a.deals.filter(d=>d.ty===2||!claimedIds.has(String(d.id||"")));
+      const otherClosed=new Set(otherDeals.filter(d=>d.ty!==2&&d.e!==0).map(d=>String(d.id||""))).size;
+      if(otherClosed>0){ const other=makeBotView(()=>true,"Other • unmatched",otherDeals); other.positions=[]; out[`${login}:Other`]=other; }
       return;
     }
     if(/thor/i.test(label)){
@@ -931,7 +968,11 @@ const kvRow=(k,v,color)=>`<div class="row"><span class="k">${k}</span><span clas
 function render(){
   const app=$("#app");
   setStatus(state.lastUpdate?ago(state.lastUpdate):"—", !!state.accounts&&Object.keys(state.accounts||{}).length>0);
-  if(state.showSettings){ app.innerHTML=settingsHTML(); return; }
+  const navPos=document.getElementById("navPositions");
+  if(state.showSettings){ app.innerHTML=settingsHTML(); if(navPos)navPos.classList.remove("active"); return; }
+  if(state.needsAuth) state.page="dashboard";
+  if(state.page==="positions"){ app.innerHTML=positionsMonitorHTML(); if(navPos)navPos.classList.add("active"); return; }
+  if(navPos)navPos.classList.remove("active");
   let html="";
   if(state.needsAuth){
     html+=`<div class="authbox"><div class="disp" style="font-size:14px;font-weight:600">One more step: database secret</div>
@@ -1987,6 +2028,97 @@ function positionsHTML(a,cur,openPL,span){
   return h+`</div>`;
 }
 
+/* ---------- LIVE POSITIONS MONITOR (all accounts) ---------- */
+function positionsMonitorHTML(){
+  const allAcc=state.accounts||{};
+  const nAcc=Object.keys(allAcc).length;
+  let head=`<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div class="disp" style="font-size:24px;font-weight:700">Live positions <span style="color:var(--dim);font-size:15px;font-weight:500">across ${nAcc} account${nAcc===1?"":"s"} • updated ${ago(state.lastUpdate)}</span></div></div>`;
+  if(!nAcc) return head+`<div class="panel loading pulse" style="padding:22px">${state.auth?"Loading open positions…":"Add your database secret in Settings to load positions."}</div>`;
+
+  const rows=[];
+  Object.entries(allAcc).forEach(([login,a])=>{
+    const label=tileAccountLabel(a.info?.label||login,login);
+    (a.positions||[]).forEach(p=>rows.push({login,label,
+      symbol:p.symbol,type:p.type,volume:+p.volume||0,openPrice:p.openPrice,currentPrice:p.currentPrice,
+      sl:p.sl,tp:p.tp,swap:+p.swap||0,profit:+p.profit||0,openTime:p.openTime,ticket:p.ticket}));
+  });
+  const cur="USD";
+  if(!rows.length) return head+`<div class="panel loading" style="padding:22px">No open positions across any account right now.</div>`;
+
+  const nPos=rows.length;
+  const totalPL=rows.reduce((s,r)=>s+r.profit,0);
+  const totalSwap=rows.reduce((s,r)=>s+r.swap,0);
+  const grossLots=rows.reduce((s,r)=>s+Math.abs(r.volume),0);
+  const acctsTrading=new Set(rows.map(r=>r.login)).size;
+  const winners=rows.filter(r=>r.profit>0).length, losers=rows.filter(r=>r.profit<0).length;
+
+  let h=head;
+  h+=`<div class="pmtiles">
+    <div class="pmtile"><div class="lbl">Open positions</div><div class="val">${nPos}</div><div class="sub">${acctsTrading} account${acctsTrading===1?"":"s"} trading</div></div>
+    <div class="pmtile"><div class="lbl">Open P/L</div><div class="val" style="color:${sColor(totalPL)}">${totalPL>=0?"+":""}${fmtMoney(totalPL,cur)}</div><div class="sub"><span style="color:var(--up)">${winners} up</span> • <span style="color:var(--down)">${losers} down</span></div></div>
+    <div class="pmtile"><div class="lbl">Gross lots</div><div class="val">${fmtNum(grossLots)}</div><div class="sub">total volume exposed</div></div>
+    <div class="pmtile"><div class="lbl">Net swap</div><div class="val" style="color:${sColor(totalSwap)}">${fmtNum(totalSwap)}</div><div class="sub">carry on open trades</div></div>
+  </div>`;
+
+  const bySym={};
+  rows.forEach(r=>{
+    const s=bySym[r.symbol]||(bySym[r.symbol]={symbol:r.symbol,net:0,buy:0,sell:0,pl:0,n:0,accts:new Set()});
+    s.net+=(r.type==="BUY"?1:-1)*r.volume;
+    if(r.type==="BUY")s.buy+=r.volume; else s.sell+=r.volume;
+    s.pl+=r.profit; s.n++; s.accts.add(r.login);
+  });
+  const syms=Object.values(bySym).sort((x,y)=>compareInstruments(x.symbol,y.symbol));
+  const maxNet=Math.max(...syms.map(s=>Math.abs(s.net)),0.0001);
+  h+=`<div class="panel" style="padding:16px;margin-bottom:16px"><div class="sect" style="margin-bottom:12px">Net exposure by symbol</div>
+    <div class="tblwrap"><table><tr><th style="text-align:left">Symbol</th><th>Net lots</th><th style="width:30%">Direction</th><th>Buy</th><th>Sell</th><th>Positions</th><th>Accounts</th><th>Open P/L</th></tr>`;
+  syms.forEach(s=>{
+    const long=s.net>=0, pct=Math.min(100,Math.abs(s.net)/maxNet*100);
+    const bar=`<div class="expo-bar"><span style="left:50%;width:1px;background:var(--dim)"></span><span style="${long?`left:50%;width:${pct/2}%;background:var(--up)`:`right:50%;width:${pct/2}%;background:var(--down)`}"></span></div>`;
+    h+=`<tr class="mono">
+      <td style="text-align:left;color:var(--brass);font-weight:600">${esc(s.symbol)}</td>
+      <td style="color:${long?"var(--up)":"var(--down)"};font-weight:600">${long?"+":""}${fmtNum(s.net)} ${Math.abs(s.net)<1e-9?"FLAT":long?"LONG":"SHORT"}</td>
+      <td>${bar}</td>
+      <td style="color:var(--mute)">${fmtNum(s.buy)}</td>
+      <td style="color:var(--mute)">${fmtNum(s.sell)}</td>
+      <td style="color:var(--mute)">${s.n}</td>
+      <td style="color:var(--mute)">${s.accts.size}</td>
+      <td style="color:${sColor(s.pl)};font-weight:600">${s.pl>=0?"+":""}${fmtNum(s.pl)}</td></tr>`;
+  });
+  h+=`</table></div><div style="font-size:11px;color:var(--dim);margin-top:8px">Net lots = Σ(buy − sell) across all accounts. Opposing legs (a copier and its inverse) net toward zero; a large net value flags concentrated one-way fleet risk.</div></div>`;
+
+  const sort=state.posSort||"symbol";
+  const sorted=rows.slice();
+  if(sort==="pl") sorted.sort((a,b)=>a.profit-b.profit);
+  else if(sort==="account") sorted.sort((a,b)=>a.label.localeCompare(b.label)||compareInstruments(a.symbol,b.symbol));
+  else sorted.sort((a,b)=>compareInstruments(a.symbol,b.symbol)||a.label.localeCompare(b.label));
+  h+=`<div class="panel" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div class="sect" style="margin-bottom:0">All open positions (${nPos})</div>
+      <div class="pmsort">
+        <button class="${sort==='symbol'?'active':''}" onclick="setPosSort('symbol')">By symbol</button>
+        <button class="${sort==='account'?'active':''}" onclick="setPosSort('account')">By account</button>
+        <button class="${sort==='pl'?'active':''}" onclick="setPosSort('pl')">By P/L</button>
+      </div></div>
+    <div class="tblwrap"><table>
+      <tr><th style="text-align:left">Account</th><th style="text-align:left">Symbol</th><th>Type</th><th>Lots</th><th>Open</th><th>Now</th><th>SL</th><th>TP</th><th>Swap</th><th>P/L</th><th>Since</th></tr>`;
+  sorted.forEach(r=>{
+    h+=`<tr class="mono">
+      <td style="text-align:left"><span class="acctpill">${esc(r.label)}</span></td>
+      <td style="text-align:left;color:var(--text);font-weight:600">${esc(r.symbol)}</td>
+      <td style="color:${r.type==="BUY"?"var(--up)":"var(--down)"};font-weight:600">${esc(r.type)}</td>
+      <td style="color:var(--mute)">${fmtNum(r.volume)}</td>
+      <td style="color:var(--mute)">${fmtNum(r.openPrice,5)}</td>
+      <td style="color:var(--mute)">${fmtNum(r.currentPrice,5)}</td>
+      <td style="color:var(--dim)">${r.sl?fmtNum(r.sl,5):"—"}</td>
+      <td style="color:var(--dim)">${r.tp?fmtNum(r.tp,5):"—"}</td>
+      <td style="color:${sColor(r.swap)}">${fmtNum(r.swap)}</td>
+      <td style="color:${sColor(r.profit)};font-weight:600">${r.profit>=0?"+":""}${fmtNum(r.profit)}</td>
+      <td style="color:var(--dim)">${r.openTime?ago(r.openTime*1000):"—"}</td></tr>`;
+  });
+  h+=`</table></div></div>`;
+  return h;
+}
+
 function settingsHTML(){
   return `<div class="settings">
     <div class="disp" style="font-size:28px;font-weight:700;margin-bottom:4px">Settings</div>
@@ -2220,6 +2352,8 @@ window.selectTab=t=>{state.tab=t;render();};
 window.toggleAnalysisZoom=()=>{state.anLarge=!state.anLarge;render();};
 window.showMoreTrades=()=>{state.tradesShown+=50;render();};
 window.toggleSettings=()=>{state.showSettings=!state.showSettings;render();};
+window.togglePositions=()=>{state.showSettings=false;state.page=state.page==="positions"?"dashboard":"positions";render();};
+window.setPosSort=v=>{state.posSort=v;render();};
 window.saveSecret=()=>{const v=$("#secretInput").value.trim();if(!v)return;
   state.auth=v;localStorage.setItem(LS.auth,v);state.needsAuth=false;state.error=null;render();refresh(true);};
 window.saveSettings=()=>{state.auth=$("#setSecret").value.trim();
