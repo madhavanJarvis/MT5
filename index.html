@@ -280,9 +280,14 @@ function accountType(a){
   return "PROP";
 }
 const ATTACHED_ACCOUNT_SUFFIXES = new Set(["8769", "3006", "7239", "9192", "0291", "9017"]);
+const EMA_MINUTES_ACCOUNT_SUFFIXES = new Set(["4685", "1729"]);
 function isAttachedAccount(login){
   const digits=(String(login||"").match(/\d/g)||[]).join("");
   return digits.length>=4 && ATTACHED_ACCOUNT_SUFFIXES.has(digits.slice(-4));
+}
+function isEmaMinutesAccount(login){
+  const digits=(String(login||"").match(/\d/g)||[]).join("");
+  return digits.length>=4 && EMA_MINUTES_ACCOUNT_SUFFIXES.has(digits.slice(-4));
 }
 function accountsForView(accounts){
   let scoped;
@@ -290,12 +295,31 @@ function accountsForView(accounts){
   else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)!=="DEMO"));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
+  else if(state.accountView==="EMA_MINUTES") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isEmaMinutesAccount(login)));
   else scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)===state.accountView));
   const out={};
   Object.entries(scoped).forEach(([login,a])=>{
     const label=String(a?.info?.label||login);
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
+    if(isEmaMinutesAccount(login) && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      const prefix=String(login).replace(/\D/g,"").endsWith("4685")?"PTP":"VS1";
+      const splitTiles=["1M","2M","3M"].map(minutes=>({
+        key:`${login}:${prefix}${minutes}`,
+        label:`${prefix} ${minutes}`,
+        match:c=>new RegExp(`^${prefix}[ _-]+(?:Buy|Sell)[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
+      }));
+      const makeMinutesView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      };
+      splitTiles.forEach(t=>{out[t.key]=makeMinutesView(t.match,t.label);});
+      return;
+    }
     if(tileLabelKey(label)==="ema40" && Array.isArray(a.deals)){
       // 9017 runs four EAs on one login; each stamps a distinct comment prefix. Match the exact
       // prefix so every closed position lands in exactly one tile (verified 03 Sep 2026 on 308 deals).
@@ -1012,7 +1036,7 @@ function render(){
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -1040,14 +1064,15 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.values(allAcc).filter(a=>accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0,VIRAJITH:0,MADHAVAN:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(!visible) return;
     if(isAttachedAccount(login)) counts.VIRAJITH++; else counts.MADHAVAN++;
+    if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
   });
   dashboardAccounts.forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
@@ -1056,6 +1081,7 @@ function dashboardToolbar(allAcc){
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
         <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
         <option value="MADHAVAN" ${state.accountView==="MADHAVAN"?"selected":""}>Madhavan (${counts.MADHAVAN})</option>
+        <option value="EMA_MINUTES" ${state.accountView==="EMA_MINUTES"?"selected":""}>EMA Minutes (${counts.EMA_MINUTES})</option>
         <option value="DEMO" ${state.accountView==="DEMO"?"selected":""}>MetaQuotes Demo (${counts.DEMO})</option>
       </select>
     </div>
