@@ -504,7 +504,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
       const ps=pipSize(P.symbol);
       pips = (closePrice-openPrice)/ps * (P.dir==="BUY"?1:-1);
     }
-    trades.push({symbol:P.symbol, dir:P.dir||"—", volume:P.volume||P.closedVol,
+    trades.push({positionId:k, symbol:P.symbol, dir:P.dir||"—", volume:P.volume||P.closedVol,
       openTime:P.openTime, closeTime:P.closeTime, openPrice, closePrice,
       profit:net, rawProfit:P.profit, commission, standardCommission, swap:P.swap, pips,
       exit: P.slHit?"SL":P.tpHit?"TP":P.soHit?"SO":"Manual",
@@ -1580,6 +1580,18 @@ function tpSlMovement(r){
   const buy=tpSlSide(r)==="BUY";
   return {tpm:Math.max(0,(buy?best-entry:entry-best)/ps),slm:Math.max(0,(buy?entry-worst:worst-entry)/ps)};
 }
+function realizedPipDollarRate(t){
+  const pips=Number(t?.pips), gross=Number(t?.rawProfit);
+  return isFinite(pips)&&Math.abs(pips)>1e-9&&isFinite(gross)?Math.abs(gross/pips):null;
+}
+function excursionDollar(t,kind){
+  const r=arguments.length>2?arguments[2]:null;
+  const movement=r?tpSlMovement(r):null;
+  const rate=realizedPipDollarRate(t);
+  if(!movement||rate==null) return null;
+  const pips=kind==="tpm"?movement.tpm:kind==="slm"?movement.slm:movement.tpm-(Number(t.pips)||0);
+  return isFinite(pips)?pips*rate:null;
+}
 function isTemporaryTpSlHit(r){
   return r?.temporary===true||r?.temporary===1||r?.temporary==="true"||r?.hitType==="TEMP_TP"||r?.hitType==="TEMP_SL";
 }
@@ -1991,10 +2003,27 @@ function tabTrades(m,a,cur){
   const tr=filteredTrades(m);
   const W=tr.filter(t=>t.profit>0).length, L=tr.filter(t=>t.profit<0).length;
   const pr=tr.reduce((sm,t)=>sm+t.profit,0);
-  const pp=tr.some(t=>t.pips!=null)?tr.reduce((sm,t)=>sm+(t.pips||0),0):null;
   const lots=tr.reduce((sm,t)=>sm+(t.volume||0),0);
   const commission=tr.reduce((sm,t)=>sm+(t.commission||0),0);
   const sl=tr.filter(t=>t.exit==="SL").length, tp=tr.filter(t=>t.exit==="TP").length;
+  const closedMoveDollarValues=tr.map(t=>{
+    const rate=realizedPipDollarRate(t);
+    return rate!=null&&t.pips!=null?t.pips*rate:null;
+  }).filter(v=>v!=null&&isFinite(v));
+  const closedMoveDollar=closedMoveDollarValues.length?closedMoveDollarValues.reduce((s,v)=>s+v,0):null;
+  const tpSlById=a?.tpSlHistory||{};
+  const averageExcursion=(trades,side)=>{
+    const moves=trades.map(t=>{
+      const r=tpSlById[String(t.positionId)];
+      if(!r) return null;
+      return excursionDollar(t,side,r);
+    }).filter(v=>v!=null&&isFinite(v));
+    return moves.length?moves.reduce((s,v)=>s+v,0)/moves.length:null;
+  };
+  const avgTpm=averageExcursion(tr,"tpm");
+  const avgSlm=averageExcursion(tr,"slm");
+  const avgTpmCloseGap=averageExcursion(tr,"gap");
+  const avgTpmCloseGapLoss=averageExcursion(tr.filter(t=>t.profit<0),"gap");
   h+=`<div class="panel"><div class="grid">
     ${stat("Trades",tr.length,null,fmtNum(lots)+" lots")}
     ${stat("Winners",W,"var(--up)",tr.length?(W/tr.length*100).toFixed(1)+"%":"")}
@@ -2002,17 +2031,26 @@ function tabTrades(m,a,cur){
     ${stat("TP / SL hits",hasExit?tp+" / "+sl:"—",null,hasExit?"":"needs EA v1.2")}
     ${stat("Commission",fmtMoney(commission,cur),sColor(commission))}
     ${stat("Final P/L",fmtMoney(pr,cur),sColor(pr))}
-    ${stat("Pips",pp!=null?fmtNum(pp,1):"—",sColor(pp))}
+    ${stat("Closed move",closedMoveDollar!=null?fmtMoney(closedMoveDollar,cur):"—",sColor(closedMoveDollar),"realized movement")}
+    ${stat("Avg TPM",avgTpm!=null?fmtMoney(avgTpm,cur):"—","var(--up)","all filtered orders")}
+    ${stat("Avg SLM",avgSlm!=null?fmtMoney(avgSlm,cur):"—","var(--down)","all filtered orders")}
+    ${stat("Avg TPM−Close gap",avgTpmCloseGap!=null?fmtMoney(avgTpmCloseGap,cur):"—",sColor(avgTpmCloseGap),"TPM minus realized close")}
+    ${stat("Avg TPM−Close gap (loss)",avgTpmCloseGapLoss!=null?fmtMoney(avgTpmCloseGapLoss,cur):"—",sColor(avgTpmCloseGapLoss),"loss orders only")}
   </div></div>`;
   h+=commentDateBreakdown(tr,cur);
   h+=posHtml;
   // ---- history table ----
   const shown=tr.slice(0,state.tradesShown);
-  h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST</div>
+  h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">• TPM/SLM are per-order pip excursions from entry</span></div>
     <div class="tblwrap"><table>
-    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
+    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−Close<br>($)</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
   shown.forEach(t=>{
     const exitColor=t.exit==="TP"?"var(--up)":t.exit==="SL"?"var(--down)":t.exit==="SO"?"#E8B36A":"var(--dim)";
+    const excursion=tpSlById[String(t.positionId)];
+    const movement=excursion?tpSlMovement(excursion):null;
+    const tpmDollar=excursionDollar(t,"tpm",excursion);
+    const slmDollar=excursionDollar(t,"slm",excursion);
+    const tpmCloseGap=excursionDollar(t,"gap",excursion);
     h+=`<tr class="mono">
       <td style="color:var(--mute)">${t.openTime!=null?dtIstStr(t.openTime):"—"}</td>
       <td style="color:var(--mute)">${dtIstStr(t.closeTime)}</td>
@@ -2022,6 +2060,9 @@ function tabTrades(m,a,cur){
       <td style="color:var(--mute)">${t.openPrice!=null?fmtNum(t.openPrice,5):"—"}</td>
       <td style="color:var(--mute)">${t.closePrice!=null?fmtNum(t.closePrice,5):"—"}</td>
       <td style="color:var(--mute)">${durStr(t.duration)}</td>
+      <td style="color:var(--up)">${tpmDollar!=null?fmtMoney(tpmDollar,cur):"—"}</td>
+      <td style="color:var(--down)">${slmDollar!=null?fmtMoney(slmDollar,cur):"—"}</td>
+      <td style="color:${sColor(tpmCloseGap)}">${tpmCloseGap!=null?fmtMoney(tpmCloseGap,cur):"—"}</td>
       <td style="color:${exitColor}">${esc(t.exit)}</td>
       <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
       <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td></tr>`;});
