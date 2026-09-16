@@ -263,7 +263,7 @@ let state = {
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
   anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anComment:"ALL", anLarge:false,
-  balanceMonth:"ALL", dailyExpanded:{},
+  balanceMonth:"ALL", dailyExpanded:{}, slmCommentExpanded:{},
   tpSymbol:"ALL", tpPreset:"TODAY", tpFrom:"", tpTo:"",
   customFrom:"", customTo:"",
   wlPreset:"ALL", wlFrom:"", wlTo:"",
@@ -1981,6 +1981,38 @@ function commentDateBreakdown(tr,cur){
     <div class="tblwrap"><table><tr><th>Date</th><th>Symbols</th><th>Orders</th><th>W / L</th><th>Lots</th><th>Commission</th><th>Final P/L</th><th>First close</th><th>Last close</th></tr>${rows}</table></div></div>`;
 }
 
+function slmCommentSummary(tr,tpSlById,cur){
+  const groups={};
+  (tr||[]).forEach(t=>{
+    const rawComment=t.comment||"(none)";
+    const vs1=rawComment.match(/^VS1[_ -](?:Buy|Sell)[_ -](1M|2M|3M|5M)(?:$|[_ -])/i);
+    const comment=vs1?`VS1 ${vs1[1].toUpperCase()}`:rawComment;
+    const r=tpSlById?.[String(t.positionId)];
+    const slm=excursionDollar(t,"slm",r);
+    const g=groups[comment]||{comment,orders:0,measured:0,reached:0,totalSlm:0,maxSlm:null,items:[]};
+    g.orders++;
+    if(slm!=null&&isFinite(slm)){
+      g.measured++; g.totalSlm+=slm; g.maxSlm=g.maxSlm==null?slm:Math.max(g.maxSlm,slm);
+      if(slm>=2.5) g.reached++;
+    }
+    if(slm!=null&&isFinite(slm)&&slm>=2.5) g.items.push({trade:t,slm});
+    groups[comment]=g;
+  });
+  const rows=Object.values(groups).sort((a,b)=>b.reached-a.reached||b.orders-a.orders||a.comment.localeCompare(b.comment)).map(g=>{
+    const expanded=!!state.slmCommentExpanded[g.comment];
+    const token=encodeURIComponent(g.comment).replace(/'/g,"%27");
+    const details=expanded?`<tr class="daily-detail"><td colspan="6"><div class="daily-detail-title">${esc(g.comment)} · orders with SLM ≥ $2.50</div><div class="tblwrap"><table><tr><th>Open (IST)</th><th>Close (IST)</th><th>Instrument</th><th>Side</th><th>SLM</th><th>Final P/L</th><th>Outcome</th></tr>${g.items.slice().sort((x,y)=>(y.trade.closeTime??0)-(x.trade.closeTime??0)).map(({trade:t,slm})=>`<tr class="mono"><td style="color:var(--mute)">${t.openTime!=null?dtIstStr(t.openTime):"—"}</td><td style="color:var(--mute)">${dtIstStr(t.closeTime)}</td><td>${esc(t.symbol||"—")}</td><td style="color:${t.dir==="BUY"?"var(--up)":"var(--down)"}">${esc(t.dir||"—")}</td><td style="color:var(--down)">${fmtMoney(slm,cur)}</td><td style="color:${sColor(t.profit)}">${fmtMoney(t.profit,cur)}</td><td style="color:${t.exit==="SL"?"var(--down)":t.exit==="TP"?"var(--up)":"var(--dim)"}">${esc(t.exit||"Manual")}</td></tr>`).join("")||`<tr><td colspan="7" style="color:var(--dim)">No qualifying orders.</td></tr>`}</table></div></td></tr>`:"";
+    return `<tr class="mono">
+    <td style="color:var(--brass);font-weight:600"><button class="daily-expand" onclick="toggleSlmComment('${token}')" aria-expanded="${expanded}">${expanded?"−":"+"}</button>${esc(g.comment)}</td>
+    <td>${g.orders}</td><td>${g.measured}</td>
+    <td style="color:${g.reached?"var(--down)":"var(--mute)"};font-weight:700">${g.reached}</td>
+    <td style="color:var(--down)">${g.measured?fmtMoney(g.totalSlm/g.measured,cur):"—"}</td>
+    <td style="color:var(--down)">${g.maxSlm!=null?fmtMoney(g.maxSlm,cur):"—"}</td></tr>${details}`;
+  }).join("");
+  return `<div class="panel" style="padding:16px"><div class="sect">SLM threshold by comment <span style="color:var(--dim);text-transform:none;letter-spacing:0">• 4254 source account • SLM ≥ ${fmtMoney(2.5,cur)} • follows current filters</span></div>
+    <div class="tblwrap"><table><tr><th>Comment</th><th>Orders</th><th>SLM measured</th><th>SLM ≥ $2.50</th><th>Avg SLM</th><th>Max SLM</th></tr>${rows||`<tr><td colspan="6" style="color:var(--dim)">No matching orders.</td></tr>`}</table></div></div>`;
+}
+
 function tabTrades(m,a,cur){
   const posHtml=positionsHTML(a,cur,(a.positions||[]).reduce((s,p)=>s+(p.profit||0),0));
   let h="";
@@ -2102,6 +2134,8 @@ function tabTrades(m,a,cur){
     ${stat("Avg TPM−Close gap",avgTpmCloseGap!=null?fmtMoney(avgTpmCloseGap,cur):"—",sColor(avgTpmCloseGap),"TPM minus realized close")}
     ${stat("Avg TPM−Close gap (loss)",avgTpmCloseGapLoss!=null?fmtMoney(avgTpmCloseGapLoss,cur):"—",sColor(avgTpmCloseGapLoss),"loss orders only")}
   </div></div>`;
+  if(accountSuffix(a?.info?.login)==="4254"&&!/^VS1\s/i.test(String(a?.info?.label||"")))
+    h+=slmCommentSummary(tr,a?.tpSlHistory||{},cur);
   h+=commentDateBreakdown(tr,cur);
   h+=posHtml;
   // ---- history table ----
@@ -2471,6 +2505,7 @@ function aFilterBar(m){
 }
 window.setAFilter=(k,v)=>{ state[k]=v; render(); };
 window.toggleDailyBalanceDay=key=>{ state.dailyExpanded[key]=!state.dailyExpanded[key]; render(); };
+window.toggleSlmComment=token=>{ const comment=decodeURIComponent(token); state.slmCommentExpanded[comment]=!state.slmCommentExpanded[comment]; render(); };
 window.setFilter=(k,v)=>{ state[k]=v; state.tradesShown=50; render(); };
 window.setAccountView=view=>{
   state.accountView=view;
