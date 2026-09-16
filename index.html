@@ -241,6 +241,9 @@ function orderedTileLogins(accounts){
       const blockRank=item=>fanned(item) ? Math.min(...items.filter(i=>baseLogin(i)===baseLogin(item)).map(rank)) : rank(item);
       return blockRank(a) - blockRank(b)
         || ((fanned(a)||fanned(b)) ? baseLogin(a).localeCompare(baseLogin(b)) : 0)
+        || (fanned(a) && fanned(b) && baseLogin(a)===baseLogin(b)
+          ? (a.login===baseLogin(a)?-1:b.login===baseLogin(b)?1:0)
+          : 0)
         || rank(a) - rank(b) || a.index - b.index;
     }).map(item => item.login);
 }
@@ -295,6 +298,23 @@ function isEmaMinutesAccount(login){
 function isHiddenAccount(login){
   return HIDDEN_ACCOUNT_SUFFIXES.has(accountSuffix(login));
 }
+function floatingForCommentMatcher(a,matcher){
+  const source=a?.dailyFloatingByComment&&typeof a.dailyFloatingByComment==="object"?a.dailyFloatingByComment:{};
+  const out={};
+  Object.entries(source).forEach(([day,records])=>{
+    const list=records&&typeof records==="object"?Object.values(records):[];
+    const matched=list.filter(r=>r&&matcher(r.comment));
+    if(!matched.length) return;
+    const profit=matched.reduce((sum,r)=>sum+(Number(r.maxProfit)||0),0);
+    const loss=matched.reduce((sum,r)=>sum+(Number(r.maxLoss)||0),0);
+    const best=matched.slice().sort((x,y)=>(Number(y.maxProfit)||0)-(Number(x.maxProfit)||0))[0];
+    const worst=matched.slice().sort((x,y)=>(Number(x.maxLoss)||0)-(Number(y.maxLoss)||0))[0];
+    out[day]={maxProfit:profit,maxProfitAt:best?.maxProfitAt,maxLoss:loss,maxLossAt:worst?.maxLossAt,
+      last:matched.reduce((sum,r)=>sum+(Number(r.last)||0),0),lastAt:matched[matched.length-1]?.lastAt,
+      baseline:0,baselineAt:null,floor:0,breach:false,updatedAt:matched[matched.length-1]?.updatedAt};
+  });
+  return out;
+}
 function accountsForView(accounts){
   let scoped;
   if(state.accountView==="ALL") scoped=accounts||{};
@@ -307,8 +327,45 @@ function accountsForView(accounts){
   Object.entries(scoped).forEach(([login,a])=>{
     const label=String(a?.info?.label||login);
     if(isHiddenAccount(login)) return;
+    if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
+    if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      out[login]=a;
+      const splitTiles=["1M","2M","3M","5M"].map(minutes=>({
+        key:`${login}:VS1${minutes}`,
+        label:`VS1 ${minutes}`,
+        match:c=>new RegExp(`^VS1_(?:Buy|Sell)_${minutes}(?:$|_)`,`i`).test(cmOf(c))
+      }));
+      const makePropView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      };
+      splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
+      return;
+    }
+    if(state.accountView==="PROP" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      out[login]=a;
+      const splitTiles=["1M","2M","3M","5M"].map(minutes=>({
+        key:`${login}:Reverse${minutes}`,
+        label:`Reverse ${minutes}`,
+        match:c=>new RegExp(`^Reverse[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
+      }));
+      const makePropView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      };
+      splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
+      return;
+    }
     if(isEmaMinutesAccount(login) && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       const prefix=String(login).replace(/\D/g,"").endsWith("4685")?"PTP":"VS1";
@@ -322,7 +379,7 @@ function accountsForView(accounts){
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
         const totalProfit=a.metrics?.profit||0;
         const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
       };
       splitTiles.forEach(t=>{out[t.key]=makeMinutesView(t.match,t.label);});
       return;
@@ -342,7 +399,7 @@ function accountsForView(accounts){
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
         const totalProfit=a.metrics?.profit||0;
         const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        return {...a, info:{...a.info,label:viewLabel,equity}, metrics, positions, deals:dealsSrc.filter(d=>d.ty===2||matcher(d.cm))};
+        return {...a, info:{...a.info,label:viewLabel,equity}, metrics, positions, dailyFloating:floatingForCommentMatcher(a,matcher), deals:dealsSrc.filter(d=>d.ty===2||matcher(d.cm))};
       };
       EA_TILES.forEach(t=>{ out[t.key]=makeBotView(t.match,t.label); });
       // Safety net: a position no EA prefix claims gets its own tile instead of silently vanishing.
@@ -799,6 +856,7 @@ function normalizeAccount(a){
   const deals=(Array.isArray(a.deals)?a.deals:Object.values(a.deals||{})).filter(Boolean)
     .map(d=>({...d,t:utcTime(d.t,serverOff)}));
   const dailyFloating=a.dailyFloating&&typeof a.dailyFloating==="object"?a.dailyFloating:{};
+  const dailyFloatingByComment=a.dailyFloatingByComment&&typeof a.dailyFloatingByComment==="object"?a.dailyFloatingByComment:{};
   const tpSlHistory={};
   const rawTpSl=a.tpSlHistory&&typeof a.tpSlHistory==="object"?a.tpSlHistory:{};
   Object.entries(rawTpSl).forEach(([id,r])=>{
@@ -808,7 +866,7 @@ function normalizeAccount(a){
       closeTime:utcTime(r.closeTime,serverOff),
       updatedAt:utcTime(r.updatedAt,serverOff)};
   });
-  return {info,orders,positions,dailyFloating,tpSlHistory,rules,deals,
+  return {info,orders,positions,dailyFloating,dailyFloatingByComment,tpSlHistory,rules,deals,
     metrics:computeMetrics(deals,rules),
     metricsWithoutThunderbolt:computeMetrics(deals,rules,null,"Tbolts|INV|M5|"),
     botMetrics:computeMetrics(deals,rules,"Tbolts|INV|M5|"),
@@ -1024,7 +1082,7 @@ function render(){
     const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
     const allCur=acc[logins[0]].info?.currency||"USD";
     html+=`<div class="chips">`;
-    html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+    if(state.accountView!=="PROP") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,tileAccountLabel(a.info?.label||l,l),fmtMoney(a.info?.equity,a.info?.currency),
@@ -1501,7 +1559,7 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
         ${dailyBalanceMonthOptions().map(([v,l])=>`<option value="${v}" ${state.balanceMonth===v?"selected":""}>${l}</option>`).join("")}
       </select>
     </div>
-    <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TML = lowest net realized P/L reached during that trading day; TMP = highest net realized P/L. The timestamp is shown below each value.</div>
+    <div style="font-size:12px;color:var(--dim);margin:-2px 0 8px">TML = lowest net realized P/L reached during that trading day; TMP = highest net realized P/L. Floating profit/loss is captured by comment for split tiles; timestamps are shown below each value.</div>
     <div class="tblscroll-top" aria-label="Scroll daily balances table horizontally"><div></div></div>
     <div class="tblwrap"><table class="daily-balances-table">
       <tr><th>Date</th><th>Balance</th><th>Prev day EOD</th><th>Day's high</th><th>Day's low</th><th>All-time high</th><th>Daily baseline</th><th>Daily floor</th><th>TML</th><th>TMP</th><th>Day's profit</th><th>Overall profit</th><th>Max floating profit</th><th>Max floating loss</th><th>Max drawdown</th><th>Day's drawdown</th></tr>
@@ -1532,8 +1590,8 @@ function dailyBalancesSection(m,cur,info,dailyFloating={}){
           <td style="color:${sColor(maxProfit)}"><div>${fmtMoney(maxProfit,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${maxProfitAt!=null?"at "+dtStr(maxProfitAt):""}</div></td>
           <td style="color:${sColor(dayProfit)}">${fmtMoney(dayProfit,cur)}</td>
           <td style="color:${sColor(overallProfit)}">${fmtMoney(overallProfit,cur)}</td>
-          <td style="color:var(--up)">${fmtMoney(fl.maxProfit,cur)}</td>
-          <td style="color:var(--down)">${fmtMoney(fl.maxLoss,cur)}</td>
+          <td style="color:var(--up)"><div>${fmtMoney(fl.maxProfit,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${fl.maxProfitAt!=null?"at "+dtStr(fl.maxProfitAt):""}</div></td>
+          <td style="color:var(--down)"><div>${fmtMoney(fl.maxLoss,cur)}</div><div style="font-size:10px;color:var(--dim);font-family:inherit">${fl.maxLossAt!=null?"at "+dtStr(fl.maxLossAt):""}</div></td>
           <td style="color:var(--down)"><div>${fmtPct(maxDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(maxDDMoney,cur)}</div></td>
           <td style="color:var(--down)"><div>${fmtPct(dayDD,1)}</div><div style="font-size:10px;color:var(--dim)">${fmtMoney(dayDDMoney,cur)}</div></td></tr>${expanded?`<tr class="daily-detail"><td colspan="16"><div class="daily-detail-title">${esc(d.key)} · symbol breakdown</div>${symbolStatsTable(dayTrades,cur,{showPips:false,interactive:false})}</td></tr>`:""}`;
       }).join(""):`<tr><td colspan="16" style="color:var(--dim);font-size:13px">No trading days in this month.</td></tr>`}
