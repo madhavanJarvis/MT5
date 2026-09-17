@@ -329,7 +329,7 @@ function accountsForView(accounts){
       a={...a,metrics:computeMetrics(a.deals,a.rules),metricsWithoutThunderbolt:computeMetrics(a.deals,a.rules,null,"Tbolts|INV|M5|"),botMetrics:computeMetrics(a.deals,a.rules,"Tbolts|INV|M5|")};
     const label=String(a?.info?.label||login);
     if(isHiddenAccount(login)) return;
-    if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
+    if(state.accountView==="PROP" && /gft\s*reverse/i.test(label)) return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
     if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
