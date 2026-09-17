@@ -368,6 +368,17 @@ function accountsForView(accounts){
       splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
       return;
     }
+    if(state.accountView==="PROP" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      out[login]=a;
+      const matcher=c=>/^PineReplica/i.test(cmOf(c));
+      const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+      const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+      const totalProfit=a.metrics?.profit||0;
+      const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+      out[`${login}:PineReplica`]={...a,info:{...a.info,label:"PineReplica",equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      return;
+    }
     if(isEmaMinutesAccount(login) && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       const prefix=String(login).replace(/\D/g,"").endsWith("4685")?"PTP":"VS1";
@@ -2144,7 +2155,7 @@ function tabTrades(m,a,cur){
   const shown=tr.slice(0,state.tradesShown);
   h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">• TPM/SLM are per-order pip excursions from entry</span></div>
     <div class="tblwrap"><table>
-    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−Close<br>($)</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
+    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−Close<br>($)</th><th>+$8 trigger</th><th>Retrace after +$8</th><th>Retrace price</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
   shown.forEach(t=>{
     const exitColor=t.exit==="TP"?"var(--up)":t.exit==="SL"?"var(--down)":t.exit==="SO"?"#E8B36A":"var(--dim)";
     const excursion=tpSlById[String(t.positionId)];
@@ -2152,6 +2163,7 @@ function tabTrades(m,a,cur){
     const tpmDollar=excursionDollar(t,"tpm",excursion);
     const slmDollar=excursionDollar(t,"slm",excursion);
     const tpmCloseGap=excursionDollar(t,"gap",excursion);
+    const favorable=excursion?.favorableTriggered===true||excursion?.favorableTriggered===1||excursion?.favorableTriggered==="true";
     h+=`<tr class="mono">
       <td style="color:var(--mute)">${t.openTime!=null?dtIstStr(t.openTime):"—"}</td>
       <td style="color:var(--mute)">${dtIstStr(t.closeTime)}</td>
@@ -2164,6 +2176,9 @@ function tabTrades(m,a,cur){
       <td style="color:var(--up)">${tpmDollar!=null?fmtMoney(tpmDollar,cur):"—"}</td>
       <td style="color:var(--down)">${slmDollar!=null?fmtMoney(slmDollar,cur):"—"}</td>
       <td style="color:${sColor(tpmCloseGap)}">${tpmCloseGap!=null?fmtMoney(tpmCloseGap,cur):"—"}</td>
+      <td style="color:${favorable?"var(--up)":"var(--dim)"}">${favorable?"Yes":"—"}${favorable&&excursion.favorableTriggerAt!=null?`<div style="font-size:10px;color:var(--dim)">${dtIstStr(excursion.favorableTriggerAt)}</div>`:""}</td>
+      <td style="color:${favorable?"var(--down)":"var(--dim)"}">${favorable?fmtMoney(excursion.favorableRetrace,cur):"—"}${favorable&&excursion.favorableRetraceAt!=null?`<div style="font-size:10px;color:var(--dim)">${dtIstStr(excursion.favorableRetraceAt)}</div>`:""}</td>
+      <td style="color:var(--mute)">${favorable?fmtNum(excursion.favorableRetracePrice,5):"—"}</td>
       <td style="color:${exitColor}">${esc(t.exit)}</td>
       <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
       <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td></tr>`;});
