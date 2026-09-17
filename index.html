@@ -358,11 +358,6 @@ function accountsForView(accounts){
         label:`Reverse ${minutes}`,
         match:c=>new RegExp(`^Reverse[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
       }));
-      splitTiles.push({
-        key:`${login}:NoCheck`,
-        label:"NoCheck",
-        match:c=>/^Nocheck[ _-]+(?:Buy|Sell)$/i.test(cmOf(c))
-      });
       const makePropView=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
