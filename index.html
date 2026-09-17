@@ -325,6 +325,8 @@ function accountsForView(accounts){
   else scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)===state.accountView));
   const out={};
   Object.entries(scoped).forEach(([login,a])=>{
+    if(state.accountView==="PROP"&&Array.isArray(a.deals))
+      a={...a,metrics:computeMetrics(a.deals,a.rules),metricsWithoutThunderbolt:computeMetrics(a.deals,a.rules,null,"Tbolts|INV|M5|"),botMetrics:computeMetrics(a.deals,a.rules,"Tbolts|INV|M5|")};
     const label=String(a?.info?.label||login);
     if(isHiddenAccount(login)) return;
     if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
@@ -356,6 +358,11 @@ function accountsForView(accounts){
         label:`Reverse ${minutes}`,
         match:c=>new RegExp(`^Reverse[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
       }));
+      splitTiles.push({
+        key:`${login}:NoCheck`,
+        label:"NoCheck",
+        match:c=>/^Nocheck[ _-]+(?:Buy|Sell)$/i.test(cmOf(c))
+      });
       const makePropView=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
@@ -560,7 +567,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     if(P.closeTime==null) continue; // still open or orphan
     const openPrice = P.volume>0 && P.wOpen>0 ? P.wOpen/P.volume : null;
     const closePrice = P.closedVol>0 && P.wClose>0 ? P.wClose/P.closedVol : null;
-    const standardCommission=standardCommissionFor(P.symbol,P.volume||P.closedVol);
+    const standardCommission=state.accountView==="PROP"?0:standardCommissionFor(P.symbol,P.volume||P.closedVol);
     const commission=P.commission+standardCommission;
     const net = P.profit + commission + P.swap;
     let pips=null;
@@ -1259,7 +1266,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)+
       stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap")+
       stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
-      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"includes standard $5/lot for FX/metals")+
+      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")+
       stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
       '</div>';
   }
@@ -1281,7 +1288,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       ${stat("Day's low",fmtMoney(s.todayLowBal,cur),lowColor,lowTime)}
       ${stat("All-time high",fmtMoney(s.highestBal,cur),null,allHighTime)}
       ${showSwap?stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap"):""}
-      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),"includes standard $5/lot for FX/metals")}
+      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")}
       ${showSwap?stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost"):""}
       ${showSwap?"":stat("Total P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))}
       ${showDailyExtremes?stat("MPD (max day profit)",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime):""}
@@ -1311,7 +1318,7 @@ function overviewBalancePanel(a,cur){
     stat("TML",fmtMoney(m.mld,cur),sColor(m.mld),m.mldAt!=null?"at "+dtStr(m.mldAt):"")+
     stat("Profit",fmtMoney(m.grossProfit,cur),sColor(m.grossProfit),"before commission and swap")+
     stat("Swap",fmtMoney(m.totalSwap,cur),sColor(m.totalSwap),"signed MT5 cost")+
-    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),"includes standard $5/lot for FX/metals")+
+    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")+
     stat("Final P/L",fmtMoney(overallFinal,cur),sColor(overallFinal))+
     '</div></div>';
 }
