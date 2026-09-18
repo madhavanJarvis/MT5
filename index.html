@@ -284,7 +284,7 @@ function accountType(a){
 }
 const ATTACHED_ACCOUNT_SUFFIXES = new Set(["8769", "3006", "7239", "9192", "0291", "9017"]);
 const EMA_MINUTES_ACCOUNT_SUFFIXES = new Set(["4685", "1729"]);
-const HIDDEN_ACCOUNT_SUFFIXES = new Set(["4253", "0925", "4757", "1527", "0318", "7269"]);
+const HIDDEN_ACCOUNT_SUFFIXES = new Set(["4253", "0925", "4757", "1527", "0318", "7269", "3570"]);
 function accountSuffix(login){
   const digits=(String(login||"").match(/\d/g)||[]).join("");
   return digits.length>=4?digits.slice(-4):"";
@@ -339,7 +339,11 @@ function accountsForView(accounts){
         key:`${login}:VS1${minutes}`,
         label:`VS1 ${minutes}`,
         match:c=>new RegExp(`^VS1_(?:Buy|Sell)_${minutes}(?:$|_)`,`i`).test(cmOf(c))
-      }));
+      })).concat(["1M","2M","3M","5M"].map(minutes=>({
+        key:`${login}:Hedge${minutes}`,
+        label:`Hedge ${minutes}`,
+        match:c=>new RegExp(`^Hedge[ _-]+(?:Buy|Sell)[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
+      })));
       const makePropView=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
