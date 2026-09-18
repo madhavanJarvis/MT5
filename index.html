@@ -318,7 +318,8 @@ function floatingForCommentMatcher(a,matcher){
 function accountsForView(accounts){
   let scoped;
   if(state.accountView==="ALL") scoped=accounts||{};
-  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>accountType(a)!=="DEMO"));
+  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"));
+  else if(state.accountView==="GFT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="6032"));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
   else if(state.accountView==="EMA_MINUTES") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isEmaMinutesAccount(login)));
@@ -330,6 +331,7 @@ function accountsForView(accounts){
     const label=String(a?.info?.label||login);
     if(isHiddenAccount(login)) return;
     if(state.accountView==="PROP" && /gft\s*reverse/i.test(label)) return;
+    if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
     if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
@@ -384,18 +386,24 @@ function accountsForView(accounts){
       splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
       return;
     }
-    if(state.accountView==="PROP" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
+    if(state.accountView==="GFT" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       // Keep the unfiltered source account visible for reference alongside
       // the dedicated comment-based tiles below.
       out[login]=a;
-      const containsComment=token=>c=>cmOf(c).toLowerCase().includes(token.toLowerCase());
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const containsComment=token=>c=>normalizedComment(c).includes(token.toLowerCase().replace(/[^a-z0-9]/g,""));
+      const equalsComment=token=>c=>normalizedComment(c)===token.toLowerCase().replace(/[^a-z0-9]/g,"");
       const EA_TILES=[
         {key:`${login}:Nocheck`,label:"Nocheck",match:containsComment("nocheck")},
-        {key:`${login}:Claude`,label:"Claude",match:containsComment("claude")},
-        {key:`${login}:PineReplica`,label:"PineReplica",match:containsComment("pinereplica")},
-        {key:`${login}:Thanos`,label:"Thanos",match:containsComment("thanos")},
-        {key:`${login}:TradingView`,label:"TradingView",match:containsComment("tradingview")}
+        {key:`${login}:AlgoOriginal`,label:"Algo Original",match:equalsComment("algo original")},
+        {key:`${login}:AlgoThanos`,label:"Algo Thanos",match:equalsComment("algo thanos")},
+        {key:`${login}:Claude`,label:"Claude",match:equalsComment("claude")},
+        {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:equalsComment("claude combined")},
+        {key:`${login}:PineReplica`,label:"PineReplica",match:equalsComment("pinereplica")},
+        {key:`${login}:Thanos`,label:"Thanos",match:equalsComment("thanos")},
+        {key:`${login}:ThanosCombined`,label:"Thanos Combined",match:equalsComment("thanos combined")},
+        {key:`${login}:TradingView`,label:"TradingView",match:equalsComment("tradingview")}
       ];
       EA_TILES.forEach(tile=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,tile.match);
@@ -1172,22 +1180,24 @@ function botTileHTML(m,cur){
 }
 
 function dashboardToolbar(allAcc){
-  const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""))).map(([,a])=>a);
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
+  const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(!visible) return;
     if(isAttachedAccount(login)) counts.VIRAJITH++; else counts.MADHAVAN++;
     if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
+    if(accountSuffix(login)==="6032") counts.GFT++;
   });
-  dashboardAccounts.forEach(a=>{const type=accountType(a);counts[type]++;if(type!=="DEMO")counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&accountSuffix(login)!=="6032")counts.PROP++;});
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
       <select id="accountView" onchange="setAccountView(this.value)">
         <option value="ALL" ${state.accountView==="ALL"?"selected":""}>All accounts (${counts.ALL})</option>
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
+        <option value="GFT" ${state.accountView==="GFT"?"selected":""}>GFT (${counts.GFT})</option>
         <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
         <option value="MADHAVAN" ${state.accountView==="MADHAVAN"?"selected":""}>Madhavan (${counts.MADHAVAN})</option>
         <option value="EMA_MINUTES" ${state.accountView==="EMA_MINUTES"?"selected":""}>EMA Minutes (${counts.EMA_MINUTES})</option>
