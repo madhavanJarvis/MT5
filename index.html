@@ -371,12 +371,17 @@ function accountsForView(accounts){
     if(state.accountView==="PROP" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       out[login]=a;
-      const matcher=c=>/^PineReplica/i.test(cmOf(c));
-      const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
-      const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
-      const totalProfit=a.metrics?.profit||0;
-      const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-      out[`${login}:PineReplica`]={...a,info:{...a.info,label:"PineReplica",equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+      const EA_TILES=[
+        {key:`${login}:Nocheck`,label:"Nocheck",match:c=>/Nocheck/i.test(cmOf(c))},
+        {key:`${login}:PineReplica`,label:"PineReplica",match:c=>/^PineReplica/i.test(cmOf(c))}
+      ];
+      EA_TILES.forEach(tile=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,tile.match);
+        const positions=(a.positions||[]).filter(p=>tile.match(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
+        out[tile.key]={...a,info:{...a.info,label:tile.label,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,tile.match),deals:a.deals.filter(d=>d.ty===2||tile.match(d.cm))};
+      });
       return;
     }
     if(isEmaMinutesAccount(login) && Array.isArray(a.deals)){
