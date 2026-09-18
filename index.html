@@ -1142,7 +1142,20 @@ function render(){
         a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null);
     });
     html+=`</div>`;
-    if(state.selected==="ALL") html+=overviewHTML(acc);
+    if(state.selected==="ALL") {
+      if(state.accountView==="GFT"){
+        // The GFT All accounts tile is the reference view. Use the unfiltered
+        // source account for its detail tabs instead of a synthetic tile.
+        const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
+        const source=acc[sourceLogin];
+        html+=tabsHTML();
+        const color=PALETTE[logins.indexOf(sourceLogin)%PALETTE.length];
+        let tabHtml;
+        try { tabHtml=accountTabHTML(sourceLogin,source,color); }
+        catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
+        html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
+      } else html+=overviewHTML(acc);
+    }
     else if(acc[state.selected]){
       const color=PALETTE[logins.indexOf(state.selected)%PALETTE.length];
       html+=tabsHTML();
