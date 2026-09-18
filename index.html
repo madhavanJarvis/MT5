@@ -342,14 +342,26 @@ function accountsForView(accounts){
       })).concat(["1M","2M","3M","5M"].map(minutes=>({
         key:`${login}:Hedge${minutes}`,
         label:`Hedge ${minutes}`,
-        match:c=>new RegExp(`^Hedge[ _-]+(?:Buy|Sell)[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
+        // Match the words anywhere in the comment. This accepts values such as
+        // "Hedge 3M", "Hedge_3M", and broker-added prefixes/suffixes.
+        match:c=>{
+          const normalized=cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+          return normalized.includes("hedge") && normalized.includes(minutes.toLowerCase());
+        }
       })));
       const makePropView=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
         const totalProfit=a.metrics?.profit||0;
         const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+        // Keep the complete lifecycle for a matched position. MT5 may put the
+        // Hedge comment only on the entry or exit deal, so filtering each deal
+        // independently can hide the corresponding record from the dashboard.
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
       };
       splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
       return;
@@ -374,17 +386,27 @@ function accountsForView(accounts){
     }
     if(state.accountView==="PROP" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
+      // Keep the unfiltered source account visible for reference alongside
+      // the dedicated comment-based tiles below.
       out[login]=a;
+      const containsComment=token=>c=>cmOf(c).toLowerCase().includes(token.toLowerCase());
       const EA_TILES=[
-        {key:`${login}:Nocheck`,label:"Nocheck",match:c=>/Nocheck/i.test(cmOf(c))},
-        {key:`${login}:PineReplica`,label:"PineReplica",match:c=>/^PineReplica/i.test(cmOf(c))}
+        {key:`${login}:Nocheck`,label:"Nocheck",match:containsComment("nocheck")},
+        {key:`${login}:Claude`,label:"Claude",match:containsComment("claude")},
+        {key:`${login}:PineReplica`,label:"PineReplica",match:containsComment("pinereplica")},
+        {key:`${login}:Thanos`,label:"Thanos",match:containsComment("thanos")},
+        {key:`${login}:TradingView`,label:"TradingView",match:containsComment("tradingview")}
       ];
       EA_TILES.forEach(tile=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,tile.match);
         const positions=(a.positions||[]).filter(p=>tile.match(p?.comment));
         const totalProfit=a.metrics?.profit||0;
         const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        out[tile.key]={...a,info:{...a.info,label:tile.label,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,tile.match),deals:a.deals.filter(d=>d.ty===2||tile.match(d.cm))};
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&tile.match(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        out[tile.key]={...a,info:{...a.info,label:tile.label,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,tile.match),deals:matchedDeals};
       });
       return;
     }
@@ -2042,6 +2064,7 @@ function tabTrades(m,a,cur){
   const hasExit=m.allTrades.some(t=>t.exit!=="Manual");
   // ---- filter bar ----
   const trAll=filteredTrades(m,{ignoreSymbol:true}); // exit+date applied, all instruments visible
+  const commentScope=filteredTrades(m,{ignoreSymbol:true,ignoreComment:true});
   h+=`<div class="panel" style="padding:14px 16px">
     <div class="sect" style="margin-bottom:8px">Filters</div>
     <div style="display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;white-space:nowrap;align-items:center">
@@ -2059,7 +2082,10 @@ function tabTrades(m,a,cur){
         <span style="font-size:12px;color:var(--dim);align-self:center">to</span>
         <input type="date" style="max-width:145px;padding:7px 9px;font-size:12px" value="${esc(state.fTo)}" onchange="setFilter('fTo',this.value)">`:""}
       ${(()=>{
-        const cms=[...new Set(m.allTrades.map(t=>t.comment||"(none)"))].sort();
+        // Comment choices must follow the active exit/date window, not the
+        // complete account history. This makes “Today” show only today’s
+        // comments while retaining the existing comment filter behavior.
+        const cms=[...new Set(commentScope.map(t=>t.comment||"(none)"))].sort();
         return `<select style="max-width:190px" onchange="setFilter('fComment',this.value)">
           <option value="ALL" ${state.fComment==="ALL"?"selected":""}>All comments</option>
           ${cms.map(c=>`<option value="${esc(c)}" ${state.fComment===c?"selected":""}>${esc(c)}</option>`).join("")}
@@ -2329,11 +2355,11 @@ function settingsHTML(){
 }
 
 /* ============ ACTIONS ============ */
-function filteredTrades(m,{ignoreSymbol=false}={}){
+function filteredTrades(m,{ignoreSymbol=false,ignoreComment=false}={}){
   let tr=m.allTrades;
   if(!ignoreSymbol && state.fSymbol!=="ALL") tr=tr.filter(t=>t.symbol===state.fSymbol);
   if(state.fExit!=="ALL") tr=tr.filter(t=>t.exit===state.fExit);
-  if(state.fComment!=="ALL") tr=tr.filter(t=>(t.comment||"(none)")===state.fComment);
+  if(!ignoreComment && state.fComment!=="ALL") tr=tr.filter(t=>(t.comment||"(none)")===state.fComment);
   const t0=istDayStartUnix();
   if(state.fDays==="TD") tr=tr.filter(t=>tradeInWindow(t,t0,t0+86400));
   else if(state.fDays==="YD") tr=tr.filter(t=>tradeInWindow(t,t0-86400,t0));
@@ -2532,7 +2558,13 @@ function aFilterBar(m){
 window.setAFilter=(k,v)=>{ state[k]=v; render(); };
 window.toggleDailyBalanceDay=key=>{ state.dailyExpanded[key]=!state.dailyExpanded[key]; render(); };
 window.toggleSlmComment=token=>{ const comment=decodeURIComponent(token); state.slmCommentExpanded[comment]=!state.slmCommentExpanded[comment]; render(); };
-window.setFilter=(k,v)=>{ state[k]=v; state.tradesShown=50; render(); };
+window.setFilter=(k,v)=>{
+  state[k]=v;
+  // A date/exit change changes the valid comment universe. Clear an old
+  // comment selection so it cannot make the newly selected period look empty.
+  if(k==="fDays"||k==="fFrom"||k==="fTo"||k==="fExit") state.fComment="ALL";
+  state.tradesShown=50; render();
+};
 window.setAccountView=view=>{
   state.accountView=view;
   state.selected="ALL";
