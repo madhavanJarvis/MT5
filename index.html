@@ -318,8 +318,9 @@ function floatingForCommentMatcher(a,matcher){
 function accountsForView(accounts){
   let scoped;
   if(state.accountView==="ALL") scoped=accounts||{};
-  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"));
+  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554"));
   else if(state.accountView==="GFT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="6032"));
+  else if(state.accountView==="ORDERFILL") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="2554"));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
   else if(state.accountView==="EMA_MINUTES") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isEmaMinutesAccount(login)));
@@ -332,6 +333,7 @@ function accountsForView(accounts){
     if(isHiddenAccount(login)) return;
     if(state.accountView==="PROP" && /gft\s*reverse/i.test(label)) return;
     if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
+    if(state.accountView==="PROP" && accountSuffix(login)==="2554") return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
     if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
@@ -386,7 +388,8 @@ function accountsForView(accounts){
       splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
       return;
     }
-    if(state.accountView==="GFT" && accountSuffix(login)==="6032" && Array.isArray(a.deals)){
+    if(((state.accountView==="GFT" && accountSuffix(login)==="6032") ||
+        (state.accountView==="ORDERFILL" && accountSuffix(login)==="2554")) && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       // Keep the unfiltered source account visible for reference alongside
       // the dedicated comment-based tiles below.
@@ -394,10 +397,15 @@ function accountsForView(accounts){
       const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
       const containsComment=token=>c=>normalizedComment(c).includes(token.toLowerCase().replace(/[^a-z0-9]/g,""));
       const equalsComment=token=>c=>normalizedComment(c)===token.toLowerCase().replace(/[^a-z0-9]/g,"");
-      const EA_TILES=[
+      const EA_TILES=state.accountView==="ORDERFILL" ? [
+        {key:`${login}:OFNocheck`,label:"OFNocheck",match:equalsComment("OFNocheck")},
+        {key:`${login}:OFThanos`,label:"OFThanos",match:equalsComment("OFThanos")},
+        {key:`${login}:TSLNocheck`,label:"TSLNocheck",match:equalsComment("TSLNocheck")},
+        {key:`${login}:TSLThanos`,label:"TSLThanos",match:equalsComment("TSLThanos")}
+      ] : [
         {key:`${login}:Nocheck`,label:"Nocheck",match:containsComment("nocheck")},
-        {key:`${login}:AlgoOriginal`,label:"Algo Original",match:equalsComment("algo original")},
-        {key:`${login}:AlgoThanos`,label:"Algo Thanos",match:equalsComment("algo thanos")},
+        {key:`${login}:AlgowayAvengers`,label:"Algoway Avengers",match:equalsComment("algoway avengers")},
+        {key:`${login}:AlgowayThanos`,label:"Algoway Thanos",match:equalsComment("algoway thanos")},
         {key:`${login}:Claude`,label:"Claude",match:equalsComment("claude")},
         {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:equalsComment("claude combined")},
         {key:`${login}:PineReplica`,label:"PineReplica",match:equalsComment("pinereplica")},
@@ -1143,7 +1151,7 @@ function render(){
     });
     html+=`</div>`;
     if(state.selected==="ALL") {
-      if(state.accountView==="GFT"){
+      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"){
         // The GFT All accounts tile is the reference view. Use the unfiltered
         // source account for its detail tabs instead of a synthetic tile.
         const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
@@ -1166,7 +1174,7 @@ function render(){
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -1194,16 +1202,17 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(!visible) return;
     if(isAttachedAccount(login)) counts.VIRAJITH++; else counts.MADHAVAN++;
     if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
     if(accountSuffix(login)==="6032") counts.GFT++;
+    if(accountSuffix(login)==="2554") counts.ORDERFILL++;
   });
-  dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&accountSuffix(login)!=="6032")counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554")counts.PROP++;});
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
@@ -1211,6 +1220,7 @@ function dashboardToolbar(allAcc){
         <option value="ALL" ${state.accountView==="ALL"?"selected":""}>All accounts (${counts.ALL})</option>
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
         <option value="GFT" ${state.accountView==="GFT"?"selected":""}>GFT (${counts.GFT})</option>
+        <option value="ORDERFILL" ${state.accountView==="ORDERFILL"?"selected":""}>GFT Orderfill (${counts.ORDERFILL})</option>
         <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
         <option value="MADHAVAN" ${state.accountView==="MADHAVAN"?"selected":""}>Madhavan (${counts.MADHAVAN})</option>
         <option value="EMA_MINUTES" ${state.accountView==="EMA_MINUTES"?"selected":""}>EMA Minutes (${counts.EMA_MINUTES})</option>
