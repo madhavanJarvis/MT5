@@ -284,7 +284,7 @@ function accountType(a){
 }
 const ATTACHED_ACCOUNT_SUFFIXES = new Set(["8769", "3006", "7239", "9192", "0291", "9017"]);
 const EMA_MINUTES_ACCOUNT_SUFFIXES = new Set(["4685", "1729"]);
-const HIDDEN_ACCOUNT_SUFFIXES = new Set(["4253", "0925", "4757", "1527", "0318", "7269", "3570"]);
+const HIDDEN_ACCOUNT_SUFFIXES = new Set(["4253", "0925", "4757", "1527", "0318", "7269"]);
 function accountSuffix(login){
   const digits=(String(login||"").match(/\d/g)||[]).join("");
   return digits.length>=4?digits.slice(-4):"";
@@ -318,9 +318,10 @@ function floatingForCommentMatcher(a,matcher){
 function accountsForView(accounts){
   let scoped;
   if(state.accountView==="ALL") scoped=accounts||{};
-  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554"));
+  else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554"&&accountSuffix(login)!=="3570"&&accountSuffix(login)!=="3456"));
   else if(state.accountView==="GFT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="6032"));
   else if(state.accountView==="ORDERFILL") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="2554"));
+  else if(state.accountView==="MARVELS"||state.accountView==="DC") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
   else if(state.accountView==="EMA_MINUTES") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isEmaMinutesAccount(login)));
@@ -331,9 +332,11 @@ function accountsForView(accounts){
       a={...a,metrics:computeMetrics(a.deals,a.rules),metricsWithoutThunderbolt:computeMetrics(a.deals,a.rules,null,"Tbolts|INV|M5|"),botMetrics:computeMetrics(a.deals,a.rules,"Tbolts|INV|M5|")};
     const label=String(a?.info?.label||login);
     if(isHiddenAccount(login)) return;
-    if(state.accountView==="PROP" && /gft\s*reverse/i.test(label)) return;
+    if(state.accountView==="PROP" && /gft\s*reverse/i.test(label) && accountSuffix(login)!=="3570") return;
     if(state.accountView==="PROP" && accountSuffix(login)==="6032") return;
     if(state.accountView==="PROP" && accountSuffix(login)==="2554") return;
+    if(state.accountView==="PROP" && accountSuffix(login)==="3570") return;
+    if(state.accountView==="PROP" && accountSuffix(login)==="3456") return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
     if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
@@ -370,22 +373,68 @@ function accountsForView(accounts){
       splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
       return;
     }
-    if(state.accountView==="PROP" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
+    if((state.accountView==="MARVELS"||state.accountView==="DC") && ["3570","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
-      out[login]=a;
-      const splitTiles=["1M","2M","3M","5M"].map(minutes=>({
-        key:`${login}:Reverse${minutes}`,
-        label:`Reverse ${minutes}`,
-        match:c=>new RegExp(`^Reverse[ _-]+${minutes}(?:$|[ _-])`,`i`).test(cmOf(c))
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const equalsComment=token=>c=>normalizedComment(c)===token.toLowerCase().replace(/[^a-z0-9]/g,"");
+      const containsAny=terms=>c=>terms.some(term=>normalizedComment(c).includes(term));
+      const editDistance=(a,b)=>{
+        const prev=Array.from({length:b.length+1},(_,i)=>i);
+        for(let i=1;i<=a.length;i++){
+          const cur=[i];
+          for(let j=1;j<=b.length;j++) cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+          for(let j=0;j<cur.length;j++) prev[j]=cur[j];
+        }
+        return prev[b.length];
+      };
+      const fuzzyFragment=(text,target,maxDistance=2)=>{
+        for(let len=Math.max(1,target.length-maxDistance);len<=target.length+maxDistance;len++)
+          for(let i=0;i+len<=text.length;i++) if(editDistance(text.slice(i,i+len),target)<=maxDistance) return true;
+        return false;
+      };
+      const matchesClaudeCombined=c=>{
+        const n=normalizedComment(c);
+        return n.includes("claudecombined") || (fuzzyFragment(n,"claude")&&fuzzyFragment(n,"combined"));
+      };
+      const dcTiles=["2M","3M","5M"].map(minutes=>({
+        key:`${login}:VS${minutes}`,
+        label:`VS ${minutes}`,
+        match:containsAny([
+          `vs1buy${minutes.toLowerCase()}`,
+          `vs1sell${minutes.toLowerCase()}`,
+          `extraleg${minutes.toLowerCase()}`
+        ])
       }));
-      const makePropView=(matcher,viewLabel)=>{
+      const marvelTiles=[
+        {key:`${login}:Avengers`,label:"Avengers",match:equalsComment("avengers")},
+        {key:`${login}:Avengers3MTick`,label:"Avengers 3M Tick",match:equalsComment("avengers 3m tick")},
+        {key:`${login}:Avengers5MTick`,label:"Avengers 5M Tick",match:equalsComment("avengers 5m tick")},
+        {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:matchesClaudeCombined},
+        {key:`${login}:Thanos5MTick`,label:"Thanos 5M Tick",match:equalsComment("thanos 5m tick")},
+        {key:`${login}:ThanosCombined`,label:"Thanos Combined",match:equalsComment("thanos combined")},
+        {key:`${login}:TradingView`,label:"TradingView",match:equalsComment("tradingview")}
+      ];
+      const makeFilteredView=(matcher,label)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
         const totalProfit=a.metrics?.profit||0;
-        const equity=a.info?.equity==null||metrics==null ? a.info?.equity : a.info.equity+metrics.profit-totalProfit;
-        return {...a,info:{...a.info,label:viewLabel,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:a.deals.filter(d=>d.ty===2||matcher(d.cm))};
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
+        const equity=a.info?.equity==null ? a.info?.equity : a.info.equity+(metrics?.profit||0)-totalProfit;
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,...(label?{label}:{}),balance,equity},metrics,positions,dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
       };
-      splitTiles.forEach(t=>{out[t.key]=makePropView(t.match,t.label);});
+      const mainMatcher=state.accountView==="DC"
+        ? c=>dcTiles.some(tile=>tile.match(c))
+        : c=>marvelTiles.some(tile=>tile.match(c));
+      // Keep the main account tile, but summarize only this dashboard's comments.
+      out[login]=makeFilteredView(mainMatcher);
+      const splitTiles=state.accountView==="DC"?dcTiles:marvelTiles;
+      splitTiles.forEach(tile=>{
+        out[tile.key]=makeFilteredView(tile.match,tile.label);
+      });
       return;
     }
     if(((state.accountView==="GFT" && accountSuffix(login)==="6032") ||
@@ -403,16 +452,13 @@ function accountsForView(accounts){
         {key:`${login}:TSLNocheck`,label:"TSLNocheck",match:equalsComment("TSLNocheck")},
         {key:`${login}:TSLThanos`,label:"TSLThanos",match:equalsComment("TSLThanos")}
       ] : [
-        {key:`${login}:AlgowayNewThanos`,label:"Algoway New Thanos",match:equalsComment("algoway new thanos")},
         {key:`${login}:Avengers3MTick`,label:"Avengers 3M Tick",match:equalsComment("avengers 3m tick")},
         {key:`${login}:Avengers5MTick`,label:"Avengers 5M Tick",match:equalsComment("avengers 5m tick")},
         {key:`${login}:Claude`,label:"Claude",match:equalsComment("claude")},
         {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:equalsComment("claude combined")},
-        {key:`${login}:NocheckSell`,label:"Nocheck sell",match:equalsComment("nocheck sell")},
         {key:`${login}:PineReplica`,label:"PineReplica",match:equalsComment("pinereplica")},
         {key:`${login}:Thanos`,label:"Thanos",match:equalsComment("thanos")},
         {key:`${login}:Thanos3M`,label:"Thanos 3M",match:equalsComment("thanos 3m")},
-        {key:`${login}:Thanos3MIntra`,label:"Thanos 3M Intra",match:equalsComment("thanos 3m intra")},
         {key:`${login}:Thanos3MTick`,label:"Thanos 3M Tick",match:equalsComment("thanos 3m tick")},
         {key:`${login}:Thanos5M`,label:"Thanos 5M",match:equalsComment("thanos 5m")},
         {key:`${login}:Thanos5MTick`,label:"Thanos 5M Tick",match:equalsComment("thanos 5m tick")},
@@ -1148,7 +1194,7 @@ function render(){
     const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
     const allCur=acc[logins[0]].info?.currency||"USD";
     html+=`<div class="chips">`;
-    if(state.accountView!=="PROP") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+    if(state.accountView!=="PROP"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,tileAccountLabel(a.info?.label||l,l),fmtMoney(a.info?.equity,a.info?.currency),
@@ -1157,7 +1203,7 @@ function render(){
     });
     html+=`</div>`;
     if(state.selected==="ALL") {
-      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"){
+      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="MARVELS"||state.accountView==="DC"){
         // The GFT All accounts tile is the reference view. Use the unfiltered
         // source account for its detail tabs instead of a synthetic tile.
         const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
@@ -1180,7 +1226,7 @@ function render(){
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":state.accountView==="MARVELS"?"Marvels":state.accountView==="DC"?"DC":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -1208,7 +1254,7 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(!visible) return;
@@ -1216,9 +1262,10 @@ function dashboardToolbar(allAcc){
     if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
     if(accountSuffix(login)==="6032") counts.GFT++;
     if(accountSuffix(login)==="2554") counts.ORDERFILL++;
+    if(["3570","3456"].includes(accountSuffix(login))) { counts.MARVELS++; counts.DC++; }
   });
-  dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554")counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&!(["6032","2554","3570","3456"].includes(accountSuffix(login))))counts.PROP++;});
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="MARVELS"?"Marvels dashboard":state.accountView==="DC"?"DC dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
@@ -1227,6 +1274,8 @@ function dashboardToolbar(allAcc){
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
         <option value="GFT" ${state.accountView==="GFT"?"selected":""}>GFT (${counts.GFT})</option>
         <option value="ORDERFILL" ${state.accountView==="ORDERFILL"?"selected":""}>GFT Orderfill (${counts.ORDERFILL})</option>
+        <option value="MARVELS" ${state.accountView==="MARVELS"?"selected":""}>Marvels (${counts.MARVELS})</option>
+        <option value="DC" ${state.accountView==="DC"?"selected":""}>DC (${counts.DC})</option>
         <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
         <option value="MADHAVAN" ${state.accountView==="MADHAVAN"?"selected":""}>Madhavan (${counts.MADHAVAN})</option>
         <option value="EMA_MINUTES" ${state.accountView==="EMA_MINUTES"?"selected":""}>EMA Minutes (${counts.EMA_MINUTES})</option>
