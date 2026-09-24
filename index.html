@@ -59,6 +59,12 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 .sect{font-family:inherit;font-size:14px;font-weight:700;color:var(--text);letter-spacing:.04em;text-transform:uppercase;margin-bottom:10px}
 .sect span{font-weight:500}
 .chips{display:flex;flex-wrap:wrap;gap:10px;overflow-x:visible;padding:2px 2px 12px}
+.chips.compact-two-row{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:8px;padding:2px 2px 12px}
+.chips.compact-two-row .chip{min-width:0;padding:8px 7px;border-radius:12px}
+.chips.compact-two-row .chip .cl{gap:4px;margin-bottom:3px}
+.chips.compact-two-row .chip .nm{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.chips.compact-two-row .chip .eq{font-size:14px}
+.chips.compact-two-row .chip .mono{font-size:12px!important;margin-top:3px!important}
 .dashboard-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .dashboard-switch{display:flex;align-items:center;gap:9px;padding:8px 10px 8px 12px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;box-shadow:0 5px 16px rgba(74,151,181,.10);backdrop-filter:blur(16px)}
 .dashboard-switch label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
@@ -410,6 +416,7 @@ function accountsForView(accounts){
         {key:`${login}:Avengers3MTick`,label:"Avengers 3M Tick",match:equalsComment("avengers 3m tick")},
         {key:`${login}:Avengers5MTick`,label:"Avengers 5M Tick",match:equalsComment("avengers 5m tick")},
         {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:matchesClaudeCombined},
+        {key:`${login}:Thanos3MTick`,label:"Thanos 3M Tick",match:equalsComment("thanos 3m tick")},
         {key:`${login}:Thanos5MTick`,label:"Thanos 5M Tick",match:equalsComment("thanos 5m tick")},
         {key:`${login}:ThanosCombined`,label:"Thanos Combined",match:equalsComment("thanos combined")},
         {key:`${login}:TradingView`,label:"TradingView",match:equalsComment("tradingview")}
@@ -1193,7 +1200,8 @@ function render(){
     const totalTodayPL=logins.reduce((s,l)=>s+(acc[l].metrics?.periods?.[0]?.profit||0),0);
     const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
     const allCur=acc[logins[0]].info?.currency||"USD";
-    html+=`<div class="chips">`;
+    const compactTiles=state.accountView==="MARVELS"||state.accountView==="DC";
+    html+=`<div class="chips${compactTiles?" compact-two-row":""}">`;
     if(state.accountView!=="PROP"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
