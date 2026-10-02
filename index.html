@@ -401,7 +401,7 @@ function accountsForView(accounts){
       const makeClaudeNewView=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
-        const totalProfit=a.metrics?.profit||0;
+        const totalProfit=computeMetrics(a.deals,a.rules)?.profit||0;
         const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
         const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
         const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
@@ -460,6 +460,10 @@ function accountsForView(accounts){
       const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
       const dealRows=Array.isArray(a.deals)?a.deals:Object.values(a.deals||{});
       const positionRows=Array.isArray(a.positions)?a.positions:Object.values(a.positions||{});
+      const s1TViewComments=[...new Set(Object.values(scoped).flatMap(source=>{
+        const sourceDeals=Array.isArray(source?.deals)?source.deals:Object.values(source?.deals||{});
+        return sourceDeals.filter(d=>d.ty!==2&&normalizedComment(d.cm).includes("s1tview")).map(d=>cmOf(d.cm));
+      }).filter(Boolean))].sort((x,y)=>x.localeCompare(y));
       const S1_TILE_LABELS=[
         "S1 Ave 3MJ 55",
         "S1 Thanos 3M 55",
@@ -468,13 +472,10 @@ function accountsForView(accounts){
         "S1 Thanos 5M 45",
         "S1 Ave 5MJ 55",
         "S1 Ave 3MJ 45",
-        "S1 TV 3M 45",
-        "S1 TV 3M 55",
         "S1 Ave 5MJ 45",
         "S1 Thanos 3MJ 55",
-        "S1 TV 5M 45",
-        "S1 TV 5M 55",
-        "S1 Thanos 5MJ 55"
+        "S1 Thanos 5MJ 55",
+        ...s1TViewComments
       ];
       const S1_TILES=S1_TILE_LABELS.map(comment=>({
         key:`${login}:S1:${normalizedComment(comment)}`,
@@ -484,7 +485,7 @@ function accountsForView(accounts){
       const makeS1View=(matcher,viewLabel)=>{
         const metrics=computeMetrics(dealRows,a.rules,null,null,matcher);
         const positions=positionRows.filter(p=>matcher(p?.comment));
-        const totalProfit=a.metrics?.profit||0;
+        const totalProfit=computeMetrics(dealRows,a.rules)?.profit||0;
         const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
         const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
         const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
@@ -503,10 +504,11 @@ function accountsForView(accounts){
       const cmOf=c=>String(c||"").trim();
       const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
       const s2Source=Object.entries(scoped).find(([sourceLogin])=>accountSuffix(sourceLogin)==="7511")?.[1]||a;
+      const excludedS2Comments=new Set(["s2tv3m35","s2tv3m355","s2tv5m35","s2tv5m355"]);
       const s2Comments=[...new Set((s2Source.deals||[])
         .filter(d=>d.ty!==2&&/^S2(?:\s|$)/i.test(cmOf(d.cm)))
         .map(d=>cmOf(d.cm))
-        .filter(Boolean))].sort((x,y)=>x.localeCompare(y));
+        .filter(comment=>comment&&!excludedS2Comments.has(normalizedComment(comment))))].sort((x,y)=>x.localeCompare(y));
       const comments=s2Comments;
       const S2_TILES=comments.map(comment=>({
         key:`${login}:S2:${normalizedComment(comment)}`,
@@ -516,7 +518,7 @@ function accountsForView(accounts){
       const makeS2View=(matcher,viewLabel)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
-        const totalProfit=a.metrics?.profit||0;
+        const totalProfit=computeMetrics(a.deals,a.rules)?.profit||0;
         const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
         const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
         const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
@@ -828,6 +830,7 @@ function standardCommissionFor(symbol,lots){
 }
 function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null,commentMatcher=null){
   const dayShift=rules.dayShift??DAY_SHIFT;
+  const commissionFreeView=["S1","S2","CLAUDE_NEW"].includes(state.accountView);
   const metricDayKey=u=>dayKey(u,dayShift);
   const metricDayStart=()=>{const nowU=Math.floor(Date.now()/1000);return Math.floor((nowU+dayShift)/86400)*86400-dayShift;};
   let source=(dealsRaw||[]).filter(Boolean);
@@ -881,8 +884,8 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
     if(P.closeTime==null) continue; // still open or orphan
     const openPrice = P.volume>0 && P.wOpen>0 ? P.wOpen/P.volume : null;
     const closePrice = P.closedVol>0 && P.wClose>0 ? P.wClose/P.closedVol : null;
-    const standardCommission=state.accountView==="PROP"?0:standardCommissionFor(P.symbol,P.volume||P.closedVol);
-    const commission=P.commission+standardCommission;
+    const standardCommission=state.accountView==="PROP"||commissionFreeView?0:standardCommissionFor(P.symbol,P.volume||P.closedVol);
+    const commission=commissionFreeView?0:P.commission+standardCommission;
     const net = P.profit + commission + P.swap;
     let pips=null;
     if(openPrice!=null && closePrice!=null && P.symbol){
@@ -917,7 +920,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   const dailyMaxDD = new Map(), dailyMaxDDMoney = new Map();
   let twr=1, monthStartBal={}, growthByDay=new Map();
   for(const d of deals){
-    const net = (d.p||0)+(d.c||0)+(d.sw||0)+(commissionByTime[d.t]||0);
+    const net = (d.p||0)+(commissionFreeView?0:d.c||0)+(d.sw||0)+(commissionByTime[d.t]||0);
     const isTrade = d.ty!==2;
     const balBefore = bal;
     // TWR: only chain trading returns, deposits change base without return
