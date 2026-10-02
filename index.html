@@ -268,6 +268,7 @@ let state = {
   page:"dashboard", posSort:"symbol",
   fSymbol:"ALL", fExit:"ALL", fDays:0, fFrom:"", fTo:"", fComment:"ALL",
   aSymbol:"ALL", aPreset:"ALL", aFrom:"", aTo:"",
+  summaryPreset:"ALL", summaryFrom:"", summaryTo:"",
   anSymbol:"ALL", anPreset:"LAST5", anFrom:"", anTo:"", anComment:"ALL", anLarge:false,
   balanceMonth:"ALL", dailyExpanded:{}, slmCommentExpanded:{},
   tpSymbol:"ALL", tpPreset:"TODAY", tpFrom:"", tpTo:"",
@@ -327,6 +328,10 @@ function accountsForView(accounts){
   else if(state.accountView==="PROP") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login,a])=>accountType(a)!=="DEMO"&&accountSuffix(login)!=="6032"&&accountSuffix(login)!=="2554"&&accountSuffix(login)!=="3570"&&accountSuffix(login)!=="3456"));
   else if(state.accountView==="GFT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="6032"));
   else if(state.accountView==="ORDERFILL") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="2554"));
+  else if(state.accountView==="CLAUDE") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
+  else if(state.accountView==="CLAUDE_NEW") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
+  else if(state.accountView==="S1") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
+  else if(state.accountView==="S2") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["7511","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="MARVELS"||state.accountView==="DC") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
@@ -345,6 +350,132 @@ function accountsForView(accounts){
     if(state.accountView==="PROP" && accountSuffix(login)==="3456") return;
     if(accountType(a)==="IFPRO") return;
     if(/^marvel\s*2m/i.test(label)) return;
+    if(state.accountView==="CLAUDE" && ["3570","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const CLAUDE_TILES=[
+        {key:`${login}:ClaudeAve5M`,label:"Claude Ave 5M",match:c=>normalizedComment(c)==="claudeave5m"},
+        {key:`${login}:ClaudeAve3M`,label:"Claude Ave 3M",match:c=>normalizedComment(c)==="claudeave3m"}
+      ];
+      const makeClaudeView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
+        const equity=a.info?.equity==null ? a.info?.equity : a.info.equity+(metrics?.profit||0)-totalProfit;
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,label:viewLabel,balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+      };
+      CLAUDE_TILES.forEach(tile=>{out[tile.key]=makeClaudeView(tile.match,tile.label);});
+      return;
+    }
+    if(state.accountView==="CLAUDE_NEW" && ["3570","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const excludedClaudeTiles=new Set(["claudeavetsl","claudecombned","claudecombined"]);
+      const comments=[...new Set(a.deals
+        .filter(d=>d.ty!==2&&/claude/i.test(cmOf(d.cm)))
+        .map(d=>cmOf(d.cm))
+        .filter(comment=>comment&&!excludedClaudeTiles.has(normalizedComment(comment))))].sort((x,y)=>x.localeCompare(y));
+      const CLAUDE_NEW_TILES=comments.map(comment=>({
+        key:`${login}:ClaudeNew:${normalizedComment(comment)}`,
+        label:comment,
+        match:c=>normalizedComment(c)===normalizedComment(comment)
+      }));
+      const makeClaudeNewView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
+        const equity=a.info?.equity==null ? a.info?.equity : a.info.equity+(metrics?.profit||0)-totalProfit;
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,label:viewLabel,balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+      };
+      CLAUDE_NEW_TILES.forEach(tile=>{out[tile.key]=makeClaudeNewView(tile.match,tile.label);});
+      return;
+    }
+    if(state.accountView==="S1" && ["3570","3456"].includes(accountSuffix(login)) && a){
+      const cmOf=c=>String(c||"").trim();
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const dealRows=Array.isArray(a.deals)?a.deals:Object.values(a.deals||{});
+      const positionRows=Array.isArray(a.positions)?a.positions:Object.values(a.positions||{});
+      const S1_TILE_LABELS=[
+        "S1 Ave 3MJ 55",
+        "S1 Thanos 3M 55",
+        "S1 Thanos 3M 45",
+        "S1 Thanos 5M 55",
+        "S1 Thanos 5M 45",
+        "S1 Ave 5MJ 55",
+        "S1 Ave 3MJ 45",
+        "S1 TV 3M 45",
+        "S1 TV 3M 55",
+        "S1 Ave 5MJ 45",
+        "S1 Thanos 3MJ 55",
+        "S1 TV 5M 45",
+        "S1 TV 5M 55",
+        "S1 Thanos 5MJ 55"
+      ];
+      const S1_TILES=S1_TILE_LABELS.map(comment=>({
+        key:`${login}:S1:${normalizedComment(comment)}`,
+        label:comment,
+        match:c=>normalizedComment(c)===normalizedComment(comment)
+      }));
+      const makeS1View=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(dealRows,a.rules,null,null,matcher);
+        const positions=positionRows.filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
+        const equity=a.info?.equity==null ? a.info?.equity : a.info.equity+(metrics?.profit||0)-totalProfit;
+        const matchedPositionIds=new Set(dealRows
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=dealRows.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,...(viewLabel?{label:viewLabel}:{}),balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+      };
+      out[login]=makeS1View(c=>S1_TILES.some(tile=>tile.match(c)));
+      S1_TILES.forEach(tile=>{out[tile.key]=makeS1View(tile.match,tile.label);});
+      return;
+    }
+    if(state.accountView==="S2" && ["7511","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
+      const cmOf=c=>String(c||"").trim();
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const s2Source=Object.entries(scoped).find(([sourceLogin])=>accountSuffix(sourceLogin)==="7511")?.[1]||a;
+      const s2Comments=[...new Set((s2Source.deals||[])
+        .filter(d=>d.ty!==2&&/^S2(?:\s|$)/i.test(cmOf(d.cm)))
+        .map(d=>cmOf(d.cm))
+        .filter(Boolean))].sort((x,y)=>x.localeCompare(y));
+      const comments=s2Comments;
+      const S2_TILES=comments.map(comment=>({
+        key:`${login}:S2:${normalizedComment(comment)}`,
+        label:comment,
+        match:c=>normalizedComment(c)===normalizedComment(comment)
+      }));
+      const makeS2View=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+        const totalProfit=a.metrics?.profit||0;
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
+        const equity=a.info?.equity==null ? a.info?.equity : a.info.equity+(metrics?.profit||0)-totalProfit;
+        const matchedPositionIds=new Set(a.deals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,...(viewLabel?{label:viewLabel}:{}),balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+      };
+      out[login]=makeS2View(c=>S2_TILES.some(tile=>tile.match(c)));
+      S2_TILES.forEach(tile=>{out[tile.key]=makeS2View(tile.match,tile.label);});
+      return;
+    }
     if(state.accountView==="PROP" && ["4254","3456"].includes(accountSuffix(login)) && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
       out[login]=a;
@@ -402,7 +533,7 @@ function accountsForView(accounts){
         const n=normalizedComment(c);
         return n.includes("claudecombined") || (fuzzyFragment(n,"claude")&&fuzzyFragment(n,"combined"));
       };
-      const dcTiles=["2M","3M","5M"].map(minutes=>({
+      const dcTiles=["1M","3M","5M"].map(minutes=>({
         key:`${login}:VS${minutes}`,
         label:`VS ${minutes}`,
         match:containsAny([
@@ -411,16 +542,32 @@ function accountsForView(accounts){
           `extraleg${minutes.toLowerCase()}`
         ])
       }));
-      const marvelTiles=[
-        {key:`${login}:Avengers`,label:"Avengers",match:equalsComment("avengers")},
-        {key:`${login}:Avengers3MTick`,label:"Avengers 3M Tick",match:equalsComment("avengers 3m tick")},
-        {key:`${login}:Avengers5MTick`,label:"Avengers 5M Tick",match:equalsComment("avengers 5m tick")},
-        {key:`${login}:ClaudeCombined`,label:"Claude Combined",match:matchesClaudeCombined},
-        {key:`${login}:Thanos3MTick`,label:"Thanos 3M Tick",match:equalsComment("thanos 3m tick")},
-        {key:`${login}:Thanos5MTick`,label:"Thanos 5M Tick",match:equalsComment("thanos 5m tick")},
-        {key:`${login}:ThanosCombined`,label:"Thanos Combined",match:equalsComment("thanos combined")},
-        {key:`${login}:TradingView`,label:"TradingView",match:equalsComment("tradingview")}
-      ];
+      const marvelSource=Object.entries(scoped).find(([sourceLogin])=>accountSuffix(sourceLogin)==="3570")?.[1]||a;
+      const sourceShift=marvelSource?.rules?.dayShift??DAY_SHIFT;
+      const nowU=Math.floor(Date.now()/1000);
+      const yesterdayEnd=Math.floor((nowU+sourceShift)/86400)*86400-sourceShift;
+      const yesterdayStart=yesterdayEnd-86400;
+      const yesterdayPositionIds=new Set((marvelSource.deals||[])
+        .filter(d=>d.ty!==2&&d.t>=yesterdayStart&&d.t<yesterdayEnd)
+        .map(d=>String(d.id||"")));
+      const yesterdayComments=[];
+      const seenYesterdayComments=new Set();
+      const isDcComment=c=>{
+        const n=normalizedComment(c);
+        return /vs1(?:buy|sell)(?:1m|3m|5m)/.test(n)||/extraleg(?:1m|3m|5m)/.test(n);
+      };
+      (marvelSource.deals||[]).slice().sort((x,y)=>(x.t||0)-(y.t||0)).forEach(d=>{
+        const comment=cmOf(d.cm);
+        const key=normalizedComment(comment);
+        if(!yesterdayPositionIds.has(String(d.id||""))||!comment||/^\[/.test(comment)||isDcComment(comment)||seenYesterdayComments.has(key)) return;
+        seenYesterdayComments.add(key);
+        yesterdayComments.push(comment);
+      });
+      const marvelTiles=yesterdayComments.map(comment=>({
+        key:`${login}:Marvel:${normalizedComment(comment)}`,
+        label:comment,
+        match:c=>normalizedComment(c)===normalizedComment(comment)
+      }));
       const makeFilteredView=(matcher,label)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
         const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
@@ -1200,9 +1347,9 @@ function render(){
     const totalTodayPL=logins.reduce((s,l)=>s+(acc[l].metrics?.periods?.[0]?.profit||0),0);
     const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
     const allCur=acc[logins[0]].info?.currency||"USD";
-    const compactTiles=state.accountView==="MARVELS"||state.accountView==="DC";
+    const compactTiles=state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="MARVELS"||state.accountView==="DC";
     html+=`<div class="chips${compactTiles?" compact-two-row":""}">`;
-    if(state.accountView!=="PROP"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+    if(state.accountView!=="PROP"&&state.accountView!=="CLAUDE"&&state.accountView!=="CLAUDE_NEW"&&state.accountView!=="S1"&&state.accountView!=="S2"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
     logins.forEach((l,i)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       html+=chipHTML(l,tileAccountLabel(a.info?.label||l,l),fmtMoney(a.info?.equity,a.info?.currency),
@@ -1211,7 +1358,7 @@ function render(){
     });
     html+=`</div>`;
     if(state.selected==="ALL") {
-      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="MARVELS"||state.accountView==="DC"){
+      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="MARVELS"||state.accountView==="DC"){
         // The GFT All accounts tile is the reference view. Use the unfiltered
         // source account for its detail tabs instead of a synthetic tile.
         const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
@@ -1219,7 +1366,7 @@ function render(){
         html+=tabsHTML();
         const color=PALETTE[logins.indexOf(sourceLogin)%PALETTE.length];
         let tabHtml;
-        try { tabHtml=accountTabHTML(sourceLogin,source,color); }
+        try { tabHtml=accountTabHTML(sourceLogin,source,color,acc); }
         catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
         html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
       } else html+=overviewHTML(acc);
@@ -1228,13 +1375,13 @@ function render(){
       const color=PALETTE[logins.indexOf(state.selected)%PALETTE.length];
       html+=tabsHTML();
       let tabHtml;
-      try { tabHtml=accountTabHTML(state.selected,acc[state.selected],color); }
+      try { tabHtml=accountTabHTML(state.selected,acc[state.selected],color,acc); }
       catch(e){ console.error(e); tabHtml=`<div class="alert err">⚠ This tab hit an error: ${esc(e.message)}. Please report it.</div>`; }
       html+=`<div class="bento" style="margin-top:12px">`+tabHtml+`</div>`;
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":state.accountView==="MARVELS"?"Marvels":state.accountView==="DC"?"DC":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":state.accountView==="CLAUDE"?"Claude":state.accountView==="CLAUDE_NEW"?"Claude New":state.accountView==="S1"?"S1":state.accountView==="S2"?"S2":state.accountView==="MARVELS"?"Marvels":state.accountView==="DC"?"DC":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -1262,7 +1409,7 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,CLAUDE:0,CLAUDE_NEW:0,S1:0,S2:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(!visible) return;
@@ -1270,10 +1417,12 @@ function dashboardToolbar(allAcc){
     if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
     if(accountSuffix(login)==="6032") counts.GFT++;
     if(accountSuffix(login)==="2554") counts.ORDERFILL++;
-    if(["3570","3456"].includes(accountSuffix(login))) { counts.MARVELS++; counts.DC++; }
+    if(["3570","3456"].includes(accountSuffix(login))) { counts.CLAUDE++; counts.CLAUDE_NEW++; counts.MARVELS++; counts.DC++; }
+    if(["3570","3456"].includes(accountSuffix(login))) counts.S1++;
+    if(["7511","3456"].includes(accountSuffix(login))) counts.S2++;
   });
   dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&!(["6032","2554","3570","3456"].includes(accountSuffix(login))))counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="MARVELS"?"Marvels dashboard":state.accountView==="DC"?"DC dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="CLAUDE"?"Claude dashboard":state.accountView==="CLAUDE_NEW"?"Claude New dashboard":state.accountView==="S1"?"S1 dashboard":state.accountView==="S2"?"S2 dashboard":state.accountView==="MARVELS"?"Marvels dashboard":state.accountView==="DC"?"DC dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
@@ -1282,6 +1431,10 @@ function dashboardToolbar(allAcc){
         <option value="PROP" ${state.accountView==="PROP"?"selected":""}>All Prop Firms (${counts.PROP})</option>
         <option value="GFT" ${state.accountView==="GFT"?"selected":""}>GFT (${counts.GFT})</option>
         <option value="ORDERFILL" ${state.accountView==="ORDERFILL"?"selected":""}>GFT Orderfill (${counts.ORDERFILL})</option>
+        <option value="CLAUDE" ${state.accountView==="CLAUDE"?"selected":""}>Claude (${counts.CLAUDE})</option>
+        <option value="CLAUDE_NEW" ${state.accountView==="CLAUDE_NEW"?"selected":""}>Claude New (${counts.CLAUDE_NEW})</option>
+        <option value="S1" ${state.accountView==="S1"?"selected":""}>S1 (${counts.S1})</option>
+        <option value="S2" ${state.accountView==="S2"?"selected":""}>S2 (${counts.S2})</option>
         <option value="MARVELS" ${state.accountView==="MARVELS"?"selected":""}>Marvels (${counts.MARVELS})</option>
         <option value="DC" ${state.accountView==="DC"?"selected":""}>DC (${counts.DC})</option>
         <option value="VIRAJITH" ${state.accountView==="VIRAJITH"?"selected":""}>Virajith (${counts.VIRAJITH})</option>
@@ -1309,6 +1462,7 @@ function chipHTML(id,label,value,color,sparkPts,stale,todayPL=null,cur="USD",tot
 }
 function tabsHTML(){
   const tabs=[["overview","Overview"],["advanced","Advanced stats"],["analysis","Analysis"],["dailyBalances","Daily balances"],["tpSl","TP / SL"],["winners","Winners & losers"],["trades","Trades"]];
+  if(["CLAUDE","CLAUDE_NEW","S1","S2"].includes(state.accountView)) tabs.push(["summary","Summary"]);
   return `<div class="tabs">`+tabs.map(([id,l])=>
     `<button class="tab ${state.tab===id?"active":""}" onclick="selectTab('${id}')">${l}</button>`).join("")+`</div>`;
 }
@@ -1356,7 +1510,114 @@ function overviewHTML(acc){
 }
 
 /* ---------- SINGLE ACCOUNT TABS ---------- */
-function accountTabHTML(login,a,color){
+function summaryTabHTML(accounts){
+  const baseEntries=Object.entries(accounts||{}).filter(([login])=>!String(login).includes(":"));
+  const tileGroups={};
+  Object.entries(accounts||{}).forEach(([login,a])=>{
+    if(!String(login).includes(":")) return;
+    const base=String(login).split(":")[0];
+    (tileGroups[base]||(tileGroups[base]=[])).push([login,a]);
+  });
+  const preferred=state.accountView==="S2"?["7511","3456"]:["3570","3456"];
+  const summaryEntries=baseEntries.length
+    ? baseEntries.slice()
+    : Object.entries(tileGroups).map(([login,tiles])=>[login,tiles[0]?.[1]]);
+  const ordered=summaryEntries.sort((a,b)=>{
+    const ar=preferred.indexOf(accountSuffix(a[0])), br=preferred.indexOf(accountSuffix(b[0]));
+    return (ar<0?preferred.length:ar)-(br<0?preferred.length:br);
+  });
+  const scenarios=[];
+  const seen=new Set();
+  Object.entries(accounts||{}).forEach(([login,a])=>{
+    if(!String(login).includes(":")) return;
+    const label=String(a?.info?.label||"").trim();
+    if(label&&!seen.has(label)){seen.add(label);scenarios.push(label);}
+  });
+  if(!scenarios.length){
+    ordered.forEach(([,a])=>(a?.metrics?.allTrades||[]).forEach(t=>{
+      const comment=String(t.comment||"").trim();
+      if(comment&&!seen.has(comment)){seen.add(comment);scenarios.push(comment);}
+    }));
+  }
+  const summaryTradesFor=(login,a)=>{
+    const trades=baseEntries.length
+      ? (a?.metrics?.allTrades||[]).slice()
+      : (tileGroups[login]||[]).flatMap(([,tile])=>tile?.metrics?.allTrades||[]);
+    if(state.summaryPreset==="ALL") return trades;
+    const shift=a?.rules?.dayShift??DAY_SHIFT;
+    const today=istDayStartUnix(shift);
+    if(state.summaryPreset==="TODAY") return trades.filter(t=>tradeInWindow(t,today,today+86400));
+    if(state.summaryPreset==="YDAY") return trades.filter(t=>tradeInWindow(t,today-86400,today));
+    if(state.summaryPreset==="CUSTOM"){
+      const from=dateStrToUnix(state.summaryFrom,shift), end=dateStrToUnix(state.summaryTo,shift);
+      return trades.filter(t=>tradeInWindow(t,from,end==null?null:end+86400));
+    }
+    return trades;
+  };
+  const summaryTrades=ordered.map(([login,a])=>summaryTradesFor(login,a));
+  const statsForTrades=trades=>{
+    const buy=trades.filter(t=>t.dir==="BUY").length;
+    const sell=trades.filter(t=>t.dir==="SELL").length;
+    const tp=trades.filter(t=>t.exit==="TP").length;
+    const sl=trades.filter(t=>t.exit==="SL").length;
+    const wins=trades.filter(t=>(Number(t.profit)||0)>0).length;
+    const losses=trades.filter(t=>(Number(t.profit)||0)<0).length;
+    const total=trades.length;
+    return {total,buy,sell,tp,sl,wins,losses,winRate:total?wins/total*100:0,lossRate:total?losses/total*100:0,profit:trades.reduce((sum,t)=>sum+(Number(t.profit)||0),0)};
+  };
+  const statsFor=(accountIndex,scenario)=>statsForTrades(summaryTrades[accountIndex].filter(t=>String(t.comment||"").trim()===scenario));
+  const dateLabel=state.summaryPreset==="TODAY"?"Today":state.summaryPreset==="YDAY"?"Yesterday":state.summaryPreset==="CUSTOM"?"Custom":"All time";
+  const accountHeader=(a,i)=>{
+    const suffix=accountSuffix(a?.info?.login||"")||accountSuffix(ordered[i]?.[0]);
+    return `Account ${i+1}${suffix?` • ${suffix}`:""}`;
+  };
+  let h=`<div class="panel" style="padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;overflow-x:auto;white-space:nowrap">
+      <div class="sect" style="margin-bottom:0">Scenario summary <span style="color:var(--dim);text-transform:none;letter-spacing:0">• closed trades grouped by comment</span></div>
+      <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
+        <span style="font-size:12px;color:var(--dim)">Date</span>
+        <select style="max-width:150px;padding:7px 10px;font-size:12px" onchange="setSummaryFilter('summaryPreset',this.value)">
+          ${[["ALL","All time"],["TODAY","Today"],["YDAY","Yesterday"],["CUSTOM","Custom"]].map(([v,l])=>`<option value="${v}" ${state.summaryPreset===v?"selected":""}>${l}</option>`).join("")}
+        </select>
+        ${state.summaryPreset==="CUSTOM"?`<input type="date" style="max-width:140px;padding:7px 9px;font-size:12px" value="${esc(state.summaryFrom)}" onchange="setSummaryFilter('summaryFrom',this.value)"><span style="font-size:12px;color:var(--dim)">to</span><input type="date" style="max-width:140px;padding:7px 9px;font-size:12px" value="${esc(state.summaryTo)}" onchange="setSummaryFilter('summaryTo',this.value)">`:""}
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--dim);margin:10px 0 12px">Showing ${dateLabel.toLowerCase()} closed trades. Totals update with the selected date filter.</div>
+    <div class="tblwrap"><table>
+      <tr><th rowspan="2">#</th><th rowspan="2">Scenario</th>${ordered.map(([,a],i)=>`<th colspan="6">${esc(accountHeader(a,i))}</th>`).join("")}</tr>
+      <tr>${ordered.map(()=>"<th>Total orders</th><th>Buy/Sell</th><th>TP/SL</th><th>Win %</th><th>Loss rate</th><th>P/L</th>").join("")}</tr>`;
+  if(!ordered.length||!scenarios.length){
+    h+=`<tr><td colspan="${2+ordered.length*6}" style="color:var(--dim);font-size:13px">No scenario data available.</td></tr>`;
+  } else scenarios.forEach((scenario,index)=>{
+    h+=`<tr><td class="mono" style="color:var(--mute)">${index+1}</td><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(scenario)}</td>`;
+    ordered.forEach(([,a],accountIndex)=>{
+      const s=statsFor(accountIndex,scenario),cur=a?.info?.currency||"USD";
+      h+=`<td class="mono">${s.total}</td>
+        <td class="mono">${s.buy}/${s.sell}</td>
+        <td class="mono">${s.tp}/${s.sl}</td>
+        <td class="mono" style="color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td>
+        <td class="mono" style="color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td>
+        <td class="mono" style="color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+    });
+    h+=`</tr>`;
+  });
+  if(ordered.length&&scenarios.length){
+    h+=`<tr style="border-top:2px solid var(--line)"><td></td><td style="font-weight:700;color:var(--text)">Total</td>`;
+    ordered.forEach(([,a],accountIndex)=>{
+      const s=statsForTrades(summaryTrades[accountIndex]),cur=a?.info?.currency||"USD";
+      h+=`<td class="mono" style="font-weight:700">${s.total}</td>
+        <td class="mono" style="font-weight:700">${s.buy}/${s.sell}</td>
+        <td class="mono" style="font-weight:700">${s.tp}/${s.sl}</td>
+        <td class="mono" style="font-weight:700;color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td>
+        <td class="mono" style="font-weight:700;color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td>
+        <td class="mono" style="font-weight:700;color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+    });
+    h+=`</tr>`;
+  }
+  return h+`</table></div><div style="font-size:12px;color:var(--dim);margin-top:10px">Win/loss rates use realized closed-trade P/L. TP/SL shows the number of trades whose recorded exit was TP or SL.</div></div>`;
+}
+
+function accountTabHTML(login,a,color,summaryAccounts=null){
   const m=a.metrics,info=a.info,cur=info?.currency||"USD";
   const stale=info?.updatedAt?(Date.now()/1000-info.updatedAt>180):false;
   let h="";
@@ -1369,6 +1630,7 @@ function accountTabHTML(login,a,color){
   else if(state.tab==="tpSl") h+=tabTPSL(m,cur,a);
   else if(state.tab==="winners") h+=tabWinners(m,cur,color,a);
   else if(state.tab==="trades") h+=tabTrades(m,a,cur);
+  else if(state.tab==="summary" && ["CLAUDE","CLAUDE_NEW","S1","S2"].includes(state.accountView)) h+=summaryTabHTML(summaryAccounts||{});
   return h;
 }
 
@@ -2652,6 +2914,7 @@ function aFilterBar(m){
   </div>`;
 }
 window.setAFilter=(k,v)=>{ state[k]=v; render(); };
+window.setSummaryFilter=(k,v)=>{ state[k]=v; render(); };
 window.toggleDailyBalanceDay=key=>{ state.dailyExpanded[key]=!state.dailyExpanded[key]; render(); };
 window.toggleSlmComment=token=>{ const comment=decodeURIComponent(token); state.slmCommentExpanded[comment]=!state.slmCommentExpanded[comment]; render(); };
 window.setFilter=(k,v)=>{
