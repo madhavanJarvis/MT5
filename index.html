@@ -1699,6 +1699,10 @@ function summaryTabHTML(accounts){
     const suffix=accountSuffix(a?.info?.login||"")||accountSuffix(ordered[i]?.[0]);
     return `Account ${i+1}${suffix?` • ${suffix}`:""}`;
   };
+  const groupedSummary=["S1","S2"].includes(state.accountView);
+  const summaryGroupFor=scenario=>groupedSummary
+    ? (/\bthanos\b/i.test(String(scenario||""))?"Thanos":"Other scenarios")
+    : null;
   let h=`<div class="panel" style="padding:16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;overflow-x:auto;white-space:nowrap">
       <div class="sect" style="margin-bottom:0">Scenario summary <span style="color:var(--dim);text-transform:none;letter-spacing:0">• closed trades grouped by comment</span></div>
@@ -1719,9 +1723,7 @@ function summaryTabHTML(accounts){
   } else {
     let lastScenarioGroup=null;
     mainScenarios.forEach((scenario,index)=>{
-    const scenarioGroup=["S1","S2"].includes(state.accountView)
-      ? (/\bthanos\b/i.test(String(scenario))?"Thanos":"Other scenarios")
-      : null;
+    const scenarioGroup=summaryGroupFor(scenario);
     if(scenarioGroup&&scenarioGroup!==lastScenarioGroup){
       h+=`<tr><td colspan="${2+ordered.length*6}" style="padding:10px 8px 7px;background:rgba(86,168,231,.08);border-top:1px solid var(--line);font-size:12px;font-weight:700;color:var(--brass);text-transform:uppercase;letter-spacing:.08em">${scenarioGroup}</td></tr>`;
       lastScenarioGroup=scenarioGroup;
@@ -1737,9 +1739,24 @@ function summaryTabHTML(accounts){
         <td class="mono" style="color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
     });
     h+=`</tr>`;
+    const nextScenarioGroup=index+1<mainScenarios.length?summaryGroupFor(mainScenarios[index+1]):null;
+    if(groupedSummary&&scenarioGroup!==nextScenarioGroup){
+      h+=`<tr style="border-top:2px solid var(--line)"><td></td><td style="font-weight:700;color:var(--text)">${scenarioGroup} Total</td>`;
+      ordered.forEach(([,a],accountIndex)=>{
+        const groupTrades=mainSummaryTrades[accountIndex].filter(t=>summaryGroupFor(String(t.comment||"").trim())===scenarioGroup);
+        const s=statsForTrades(groupTrades),cur=a?.info?.currency||"USD";
+        h+=`<td class="mono" style="font-weight:700">${s.total}</td>
+          <td class="mono" style="font-weight:700">${s.buy}/${s.sell}</td>
+          <td class="mono" style="font-weight:700">${s.tp}/${s.sl}</td>
+          <td class="mono" style="font-weight:700;color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td>
+          <td class="mono" style="font-weight:700;color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td>
+          <td class="mono" style="font-weight:700;color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+      });
+      h+=`</tr>`;
+    }
     });
   }
-  if(ordered.length&&mainScenarios.length){
+  if(ordered.length&&mainScenarios.length&&!groupedSummary){
     h+=`<tr style="border-top:2px solid var(--line)"><td></td><td style="font-weight:700;color:var(--text)">Total</td>`;
     ordered.forEach(([,a],accountIndex)=>{
       const s=statsForTrades(mainSummaryTrades[accountIndex]),cur=a?.info?.currency||"USD";
