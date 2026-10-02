@@ -66,9 +66,9 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 .chips.compact-two-row .chip .eq{font-size:14px}
 .chips.compact-two-row .chip .mono{font-size:12px!important;margin-top:3px!important}
 .claude-new-main-row{display:grid;grid-template-columns:repeat(2,minmax(152px,220px));gap:8px;padding:2px 2px 12px}
-.claude-new-paired-scroll{overflow-x:auto;padding:2px 2px 12px}
-.claude-new-paired-grid{display:grid;gap:8px;align-items:start}
-.claude-new-pair{display:grid;gap:8px;align-content:start}
+.claude-new-paired-scroll{overflow-x:visible;padding:2px 2px 12px}
+.claude-new-paired-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:8px;align-items:start}
+.claude-new-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}
 .claude-new-pair-empty{min-height:112px;visibility:hidden}
 .claude-new-paired-scroll+.claude-new-paired-scroll{border-top:1px solid var(--line);padding-top:10px}
 .dashboard-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -336,6 +336,7 @@ function accountsForView(accounts){
   else if(state.accountView==="ORDERFILL") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="2554"));
   else if(state.accountView==="CLAUDE") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="CLAUDE_NEW") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
+  else if(state.accountView==="STAR_CT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3456"));
   else if(state.accountView==="S1") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="S2") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["7511","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="EMA921") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3148"));
@@ -414,6 +415,44 @@ function accountsForView(accounts){
       const claudeNewMatcher=c=>CLAUDE_NEW_TILES.some(tile=>tile.match(c));
       out[login]=makeClaudeNewView(claudeNewMatcher);
       CLAUDE_NEW_TILES.forEach(tile=>{out[tile.key]=makeClaudeNewView(tile.match,tile.label);});
+      return;
+    }
+    if(state.accountView==="STAR_CT" && accountSuffix(login)==="3456" && a){
+      const cmOf=c=>String(c||"").trim();
+      const normalizedComment=c=>cmOf(c).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const dealRows=Array.isArray(a.deals)?a.deals:Object.values(a.deals||{});
+      const dayShift=a.rules?.dayShift??DAY_SHIFT;
+      const todayStart=istDayStartUnix(dayShift), todayEnd=todayStart+86400;
+      const inToday=u=>u!=null&&Number(u)>=todayStart&&Number(u)<todayEnd;
+      const allMetrics=computeMetrics(dealRows,a.rules);
+      const todayTrades=(allMetrics?.allTrades||[]).filter(t=>tradeInWindow(t,todayStart,todayEnd));
+      const todayPositionIds=new Set(todayTrades.map(t=>String(t.positionId||"")));
+      const todayRawDeals=dealRows.filter(d=>d.ty!==2
+        ? todayPositionIds.has(String(d.id||""))
+        : inToday(d.t));
+      const comments=[...new Set([
+        ...todayTrades.map(t=>cmOf(t.comment)),
+        ...dealRows.filter(d=>d.ty!==2&&inToday(d.t)).map(d=>cmOf(d.cm))
+      ].filter(Boolean))].sort((x,y)=>x.localeCompare(y));
+      const makeStarCTView=(matcher,viewLabel)=>{
+        const metrics=computeMetrics(todayRawDeals,a.rules,null,null,matcher);
+        const scopeMetrics=computeMetrics(dealRows,a.rules,null,null,matcher);
+        const positions=(a.positions||[]).filter(p=>matcher(p?.comment)&&inToday(p?.openTime));
+        const totalProfit=a.metrics?.profit||0;
+        const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(scopeMetrics?.profit||0)-totalProfit;
+        const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
+        const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
+        const matchedPositionIds=new Set(todayRawDeals
+          .filter(d=>d.ty!==2&&matcher(d.cm))
+          .map(d=>String(d.id||"")));
+        const matchedDeals=todayRawDeals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        return {...a,info:{...a.info,label:viewLabel,balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+      };
+      comments.forEach(comment=>{
+        const matcher=c=>normalizedComment(c)===normalizedComment(comment);
+        out[`${login}:StarCT:${normalizedComment(comment)}`]=makeStarCTView(matcher,comment);
+      });
       return;
     }
     if(state.accountView==="S1" && ["3570","3456"].includes(accountSuffix(login)) && a){
@@ -1363,7 +1402,7 @@ function render(){
     const totalTodayPL=logins.reduce((s,l)=>s+(acc[l].metrics?.periods?.[0]?.profit||0),0);
     const totalPL=logins.reduce((s,l)=>s+(acc[l].metrics?.profit||0),0);
     const allCur=acc[logins[0]].info?.currency||"USD";
-    const compactTiles=state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="EMA921"||state.accountView==="MARVELS"||state.accountView==="DC";
+    const compactTiles=state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="STAR_CT"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="EMA921"||state.accountView==="MARVELS"||state.accountView==="DC";
     const renderTile=(l)=>{ const a=acc[l];
       const stale=a.info?.updatedAt?(Date.now()/1000-a.info.updatedAt>180):true;
       const i=logins.indexOf(l);
@@ -1371,34 +1410,32 @@ function render(){
         PALETTE[i%PALETTE.length],(a.metrics?.dailyGrowth||[]).slice(-30).map(g=>g.balance),stale,
         a.metrics?.periods?.[0]?.profit??null,a.info?.currency||"USD",a.metrics?.profit??null);
     };
-    if(state.accountView==="CLAUDE_NEW"){
-      const mainLogins=logins.filter(l=>!String(l).includes(":"));
+    if(["CLAUDE_NEW","S1","S2"].includes(state.accountView)){
+      const accountOrder=state.accountView==="S2"?["3456","7511"]:["3456","3570"];
+      const mainLogins=accountOrder.map(suffix=>logins.find(l=>!String(l).includes(":")&&accountSuffix(l)===suffix)).filter(Boolean);
       const commentLogins=logins.filter(l=>String(l).includes(":"));
-      const accountOrder=["3456","3570"];
       const commentLabels=[...new Set(commentLogins.map(l=>String(acc[l]?.info?.label||"").trim()).filter(Boolean))]
-        .sort((x,y)=>{
-          const xr=/reverse/i.test(x), yr=/reverse/i.test(y);
-          return (xr?1:0)-(yr?1:0) || x.localeCompare(y);
-        });
-      const normalComments=commentLabels.filter(label=>!/reverse/i.test(label));
-      const reverseComments=commentLabels.filter(label=>/reverse/i.test(label));
+      const separateReverse=state.accountView==="CLAUDE_NEW";
+      const normalComments=separateReverse?commentLabels.filter(label=>!/reverse/i.test(label)):commentLabels;
+      const reverseComments=separateReverse?commentLabels.filter(label=>/reverse/i.test(label)):[];
       const findCommentTile=(suffix,label)=>commentLogins.find(l=>accountSuffix(String(l).split(":")[0])===suffix
         && String(acc[l]?.info?.label||"").trim()===label);
-      const pairedCommentHTML=(labels)=>labels.length?`<div class="claude-new-paired-scroll"><div class="claude-new-paired-grid" style="grid-template-columns:repeat(${labels.length},minmax(152px,1fr));min-width:${labels.length*160}px">${labels.map(label=>{
+      const pairHTML=(top,bottom)=>`<div class="claude-new-pair">${top?renderTile(top):`<div class="claude-new-pair-empty"></div>`}${bottom?renderTile(bottom):`<div class="claude-new-pair-empty"></div>`}</div>`;
+      const pairedCommentHTML=(labels)=>labels.length?`<div class="claude-new-paired-scroll"><div class="claude-new-paired-grid">${labels.map(label=>{
         const top=findCommentTile(accountOrder[0],label), bottom=findCommentTile(accountOrder[1],label);
-        return `<div class="claude-new-pair">${top?renderTile(top):`<div class="claude-new-pair-empty"></div>`}${bottom?renderTile(bottom):`<div class="claude-new-pair-empty"></div>`}</div>`;
+        return pairHTML(top,bottom);
       }).join("")}</div></div>`:"";
-      html+=`<div class="claude-new-main-row">${mainLogins.map(renderTile).join("")}</div>`;
-      html+=pairedCommentHTML(normalComments);
+      const mainPair=pairHTML(mainLogins[0],mainLogins[1]);
+      html+=`<div class="claude-new-paired-scroll"><div class="claude-new-paired-grid">${mainPair}${normalComments.map(label=>pairHTML(findCommentTile(accountOrder[0],label),findCommentTile(accountOrder[1],label))).join("")}</div></div>`;
       html+=pairedCommentHTML(reverseComments);
     } else {
       html+=`<div class="chips${compactTiles?" compact-two-row":""}">`;
-      if(state.accountView!=="PROP"&&state.accountView!=="CLAUDE"&&state.accountView!=="CLAUDE_NEW"&&state.accountView!=="S1"&&state.accountView!=="S2"&&state.accountView!=="EMA921"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
+      if(state.accountView!=="PROP"&&state.accountView!=="CLAUDE"&&state.accountView!=="CLAUDE_NEW"&&state.accountView!=="STAR_CT"&&state.accountView!=="S1"&&state.accountView!=="S2"&&state.accountView!=="EMA921"&&state.accountView!=="MARVELS"&&state.accountView!=="DC") html+=chipHTML("ALL","All accounts",fmtMoney(totalEq,allCur),"var(--brass)",null,false,totalTodayPL,allCur,totalPL);
       logins.forEach(l=>{ html+=renderTile(l); });
       html+=`</div>`;
     }
     if(state.selected==="ALL") {
-      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="EMA921"||state.accountView==="MARVELS"||state.accountView==="DC"){
+      if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="CLAUDE"||state.accountView==="CLAUDE_NEW"||state.accountView==="STAR_CT"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="EMA921"||state.accountView==="MARVELS"||state.accountView==="DC"){
         // The GFT All accounts tile is the reference view. Use the unfiltered
         // source account for its detail tabs instead of a synthetic tile.
         const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
@@ -1421,7 +1458,7 @@ function render(){
     }
   } else if(!state.error&&!state.needsAuth){
     html+=Object.keys(allAcc).length
-      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":state.accountView==="CLAUDE"?"Claude":state.accountView==="CLAUDE_NEW"?"Claude New":state.accountView==="S1"?"S1":state.accountView==="S2"?"S2":state.accountView==="EMA921"?"EMA921":state.accountView==="MARVELS"?"Marvels":state.accountView==="DC"?"DC":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
+      ? `<div class="panel loading">No accounts are classified under <strong>${state.accountView==="PROP"?"Prop Firm":state.accountView==="ATLAS"?"ATLAS":state.accountView==="IFPRO"?"IFPro":state.accountView==="VIRAJITH"?"Virajith":state.accountView==="MADHAVAN"?"Madhavan":state.accountView==="EMA_MINUTES"?"EMA Minutes":state.accountView==="GFT"?"GFT":state.accountView==="ORDERFILL"?"GFT Orderfill":state.accountView==="CLAUDE"?"Claude":state.accountView==="CLAUDE_NEW"?"Claude New":state.accountView==="STAR_CT"?"Star CT":state.accountView==="S1"?"S1":state.accountView==="S2"?"S2":state.accountView==="EMA921"?"EMA921":state.accountView==="MARVELS"?"Marvels":state.accountView==="DC"?"DC":"MetaQuotes Demo"}</strong> yet. Use the account’s broker/server metadata or switch the selector to All accounts.</div>`
       : `<div class="panel loading pulse">Connecting to your database…</div>`;
   }
   app.innerHTML=html;
@@ -1449,7 +1486,7 @@ function botTileHTML(m,cur){
 
 function dashboardToolbar(allAcc){
   const dashboardAccounts=Object.entries(allAcc).filter(([login,a])=>!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||"")));
-  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,CLAUDE:0,CLAUDE_NEW:0,S1:0,S2:0,EMA921:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
+  const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,CLAUDE:0,CLAUDE_NEW:0,STAR_CT:0,S1:0,S2:0,EMA921:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
     if(accountSuffix(login)==="3148") counts.EMA921++;
@@ -1459,11 +1496,12 @@ function dashboardToolbar(allAcc){
     if(accountSuffix(login)==="6032") counts.GFT++;
     if(accountSuffix(login)==="2554") counts.ORDERFILL++;
     if(["3570","3456"].includes(accountSuffix(login))) { counts.CLAUDE++; counts.CLAUDE_NEW++; counts.MARVELS++; counts.DC++; }
+    if(accountSuffix(login)==="3456") counts.STAR_CT++;
     if(["3570","3456"].includes(accountSuffix(login))) counts.S1++;
     if(["7511","3456"].includes(accountSuffix(login))) counts.S2++;
   });
   dashboardAccounts.forEach(([login,a])=>{const type=accountType(a);counts[type]++;if(type!=="DEMO"&&!(["6032","2554","3570","3456"].includes(accountSuffix(login))))counts.PROP++;});
-  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="CLAUDE"?"Claude dashboard":state.accountView==="CLAUDE_NEW"?"Claude New dashboard":state.accountView==="S1"?"S1 dashboard":state.accountView==="S2"?"S2 dashboard":state.accountView==="EMA921"?"EMA921 dashboard":state.accountView==="MARVELS"?"Marvels dashboard":state.accountView==="DC"?"DC dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
+  const label=state.accountView==="ALL"?"Combined dashboard":state.accountView==="ATLAS"?"ATLAS dashboard":state.accountView==="IFPRO"?"IFPro dashboard":state.accountView==="VIRAJITH"?"Virajith dashboard":state.accountView==="MADHAVAN"?"Madhavan dashboard":state.accountView==="EMA_MINUTES"?"EMA Minutes dashboard":state.accountView==="GFT"?"GFT dashboard":state.accountView==="ORDERFILL"?"GFT Orderfill dashboard":state.accountView==="CLAUDE"?"Claude dashboard":state.accountView==="CLAUDE_NEW"?"Claude New dashboard":state.accountView==="STAR_CT"?"Star CT dashboard":state.accountView==="S1"?"S1 dashboard":state.accountView==="S2"?"S2 dashboard":state.accountView==="EMA921"?"EMA921 dashboard":state.accountView==="MARVELS"?"Marvels dashboard":state.accountView==="DC"?"DC dashboard":state.accountView==="PROP"?"Prop Firm dashboard":"MetaQuotes Demo dashboard";
   return `<div class="dashboard-toolbar">
     <div class="dashboard-switch">
       <label for="accountView">Dashboard</label>
@@ -1474,6 +1512,7 @@ function dashboardToolbar(allAcc){
         <option value="ORDERFILL" ${state.accountView==="ORDERFILL"?"selected":""}>GFT Orderfill (${counts.ORDERFILL})</option>
         <option value="CLAUDE" ${state.accountView==="CLAUDE"?"selected":""}>Claude (${counts.CLAUDE})</option>
         <option value="CLAUDE_NEW" ${state.accountView==="CLAUDE_NEW"?"selected":""}>Claude New (${counts.CLAUDE_NEW})</option>
+        <option value="STAR_CT" ${state.accountView==="STAR_CT"?"selected":""}>Star CT (${counts.STAR_CT})</option>
         <option value="S1" ${state.accountView==="S1"?"selected":""}>S1 (${counts.S1})</option>
         <option value="S2" ${state.accountView==="S2"?"selected":""}>S2 (${counts.S2})</option>
         <option value="EMA921" ${state.accountView==="EMA921"?"selected":""}>EMA921 (${counts.EMA921})</option>
@@ -1597,6 +1636,10 @@ function summaryTabHTML(accounts){
     return trades;
   };
   const summaryTrades=ordered.map(([login,a])=>summaryTradesFor(login,a));
+  const claudeAveScenarios=state.accountView==="CLAUDE_NEW" ? ["Claude Ave 3M","Claude Ave 5M"] : [];
+  const claudeAveSet=new Set(claudeAveScenarios);
+  const mainSummaryTrades=summaryTrades.map(trades=>trades.filter(t=>!claudeAveSet.has(String(t.comment||"").trim())));
+  const mainScenarios=scenarios.filter(scenario=>!claudeAveSet.has(scenario));
   const statsForTrades=trades=>{
     const buy=trades.filter(t=>t.dir==="BUY").length;
     const sell=trades.filter(t=>t.dir==="SELL").length;
@@ -1607,7 +1650,7 @@ function summaryTabHTML(accounts){
     const total=trades.length;
     return {total,buy,sell,tp,sl,wins,losses,winRate:total?wins/total*100:0,lossRate:total?losses/total*100:0,profit:trades.reduce((sum,t)=>sum+(Number(t.profit)||0),0)};
   };
-  const statsFor=(accountIndex,scenario)=>statsForTrades(summaryTrades[accountIndex].filter(t=>String(t.comment||"").trim()===scenario));
+  const statsFor=(accountIndex,scenario)=>statsForTrades(mainSummaryTrades[accountIndex].filter(t=>String(t.comment||"").trim()===scenario));
   const dateLabel=state.summaryPreset==="TODAY"?"Today":state.summaryPreset==="YDAY"?"Yesterday":state.summaryPreset==="CUSTOM"?"Custom":"All time";
   const accountHeader=(a,i)=>{
     const suffix=accountSuffix(a?.info?.login||"")||accountSuffix(ordered[i]?.[0]);
@@ -1628,9 +1671,9 @@ function summaryTabHTML(accounts){
     <div class="tblwrap"><table>
       <tr><th rowspan="2">#</th><th rowspan="2">Scenario</th>${ordered.map(([,a],i)=>`<th colspan="6">${esc(accountHeader(a,i))}</th>`).join("")}</tr>
       <tr>${ordered.map(()=>"<th>Total orders</th><th>Buy/Sell</th><th>TP/SL</th><th>Win %</th><th>Loss rate</th><th>P/L</th>").join("")}</tr>`;
-  if(!ordered.length||!scenarios.length){
+  if(!ordered.length||!mainScenarios.length){
     h+=`<tr><td colspan="${2+ordered.length*6}" style="color:var(--dim);font-size:13px">No scenario data available.</td></tr>`;
-  } else scenarios.forEach((scenario,index)=>{
+  } else mainScenarios.forEach((scenario,index)=>{
     h+=`<tr><td class="mono" style="color:var(--mute)">${index+1}</td><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(scenario)}</td>`;
     ordered.forEach(([,a],accountIndex)=>{
       const s=statsFor(accountIndex,scenario),cur=a?.info?.currency||"USD";
@@ -1643,10 +1686,10 @@ function summaryTabHTML(accounts){
     });
     h+=`</tr>`;
   });
-  if(ordered.length&&scenarios.length){
+  if(ordered.length&&mainScenarios.length){
     h+=`<tr style="border-top:2px solid var(--line)"><td></td><td style="font-weight:700;color:var(--text)">Total</td>`;
     ordered.forEach(([,a],accountIndex)=>{
-      const s=statsForTrades(summaryTrades[accountIndex]),cur=a?.info?.currency||"USD";
+      const s=statsForTrades(mainSummaryTrades[accountIndex]),cur=a?.info?.currency||"USD";
       h+=`<td class="mono" style="font-weight:700">${s.total}</td>
         <td class="mono" style="font-weight:700">${s.buy}/${s.sell}</td>
         <td class="mono" style="font-weight:700">${s.tp}/${s.sl}</td>
@@ -1656,7 +1699,43 @@ function summaryTabHTML(accounts){
     });
     h+=`</tr>`;
   }
-  return h+`</table></div><div style="font-size:12px;color:var(--dim);margin-top:10px">Win/loss rates use realized closed-trade P/L. TP/SL shows the number of trades whose recorded exit was TP or SL.</div></div>`;
+  if(state.accountView==="CLAUDE_NEW"){
+    const focusedOrdered=ordered.map((entry,index)=>({entry,index})).reverse();
+    h+=`</table></div><div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+      <div class="sect">Claude Ave summary <span style="color:var(--dim);text-transform:none;letter-spacing:0">• selected comments only</span></div>
+      <div class="tblwrap"><table>
+        <tr><th rowspan="2">#</th><th rowspan="2">Scenario</th>${focusedOrdered.map(({entry,index})=>`<th colspan="6">${esc(accountHeader(entry[1],index))}</th>`).join("")}</tr>
+        <tr>${focusedOrdered.map(()=>"<th>Total orders</th><th>Buy/Sell</th><th>TP/SL</th><th>Win %</th><th>Loss rate</th><th>P/L</th>").join("")}</tr>`;
+    claudeAveScenarios.forEach((scenario,index)=>{
+      h+=`<tr><td class="mono" style="color:var(--mute)">${index+1}</td><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(scenario)}</td>`;
+      focusedOrdered.forEach(({entry:[,a],index:accountIndex})=>{
+        const s=statsForTrades(summaryTrades[accountIndex].filter(t=>String(t.comment||"").trim()===scenario)),cur=a?.info?.currency||"USD";
+        h+=`<td class="mono">${s.total}</td>
+          <td class="mono">${s.buy}/${s.sell}</td>
+          <td class="mono">${s.tp}/${s.sl}</td>
+          <td class="mono" style="color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td>
+          <td class="mono" style="color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td>
+          <td class="mono" style="color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+      });
+      h+=`</tr>`;
+    });
+    if(focusedOrdered.length){
+      h+=`<tr style="border-top:2px solid var(--line)"><td></td><td style="font-weight:700;color:var(--text)">Total</td>`;
+      focusedOrdered.forEach(({entry:[,a],index:accountIndex})=>{
+        const focusedTrades=claudeAveScenarios.flatMap(scenario=>summaryTrades[accountIndex].filter(t=>String(t.comment||"").trim()===scenario));
+        const s=statsForTrades(focusedTrades),cur=a?.info?.currency||"USD";
+        h+=`<td class="mono" style="font-weight:700">${s.total}</td>
+          <td class="mono" style="font-weight:700">${s.buy}/${s.sell}</td>
+          <td class="mono" style="font-weight:700">${s.tp}/${s.sl}</td>
+          <td class="mono" style="font-weight:700;color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td>
+          <td class="mono" style="font-weight:700;color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td>
+          <td class="mono" style="font-weight:700;color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+      });
+      h+=`</tr>`;
+    }
+    h+=`</table></div></div>`;
+  } else h+=`</table></div>`;
+  return h+`<div style="font-size:12px;color:var(--dim);margin-top:10px">Win/loss rates use realized closed-trade P/L. TP/SL shows the number of trades whose recorded exit was TP or SL.</div></div>`;
 }
 
 function accountTabHTML(login,a,color,summaryAccounts=null){
