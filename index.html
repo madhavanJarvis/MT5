@@ -340,7 +340,7 @@ function accountsForView(accounts){
   else if(state.accountView==="STAR_CT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3456"));
   else if(state.accountView==="S1") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="S2") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["7511","3456"].includes(accountSuffix(login))));
-  else if(state.accountView==="EMA921") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3148"));
+  else if(state.accountView==="EMA921") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3148","7239"].includes(accountSuffix(login))));
   else if(state.accountView==="MARVELS"||state.accountView==="DC") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
   else if(state.accountView==="VIRAJITH") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>isAttachedAccount(login)));
   else if(state.accountView==="MADHAVAN") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>!isAttachedAccount(login)));
@@ -1520,7 +1520,7 @@ function dashboardToolbar(allAcc){
   const counts={ALL:dashboardAccounts.length,ATLAS:0,IFPRO:0,PROP:0,GFT:0,ORDERFILL:0,CLAUDE:0,CLAUDE_NEW:0,CLAUDE_R:0,STAR_CT:0,S1:0,S2:0,EMA921:0,MARVELS:0,DC:0,DEMO:0,VIRAJITH:0,MADHAVAN:0,EMA_MINUTES:0};
   Object.entries(allAcc).forEach(([login,a])=>{
     const visible=!isHiddenAccount(login)&&accountType(a)!=="IFPRO"&&!/^marvel\s*2m/i.test(String(a?.info?.label||""));
-    if(accountSuffix(login)==="3148") counts.EMA921++;
+    if(["3148","7239"].includes(accountSuffix(login))) counts.EMA921++;
     if(!visible) return;
     if(isAttachedAccount(login)) counts.VIRAJITH++; else counts.MADHAVAN++;
     if(isEmaMinutesAccount(login)) counts.EMA_MINUTES++;
@@ -2701,7 +2701,7 @@ function tabTrades(m,a,cur){
   const shown=tr.slice(0,state.tradesShown);
   h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">• TPM/SLM are per-order pip excursions from entry</span></div>
     <div class="tblwrap"><table>
-    <tr><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−Close<br>($)</th><th>+$8 trigger</th><th>Retrace after +$8</th><th>Retrace price</th><th>Close by</th><th>Commission</th><th>Final P/L</th></tr>`;
+    <tr><th>Comment</th><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>Close by</th><th>Commission</th><th>Final P/L</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−CLOSE<br>($)</th><th>+$8 trigger</th><th>Retrace after +$8</th><th>Retrace price</th></tr>`;
   shown.forEach(t=>{
     const exitColor=t.exit==="TP"?"var(--up)":t.exit==="SL"?"var(--down)":t.exit==="SO"?"#E8B36A":"var(--dim)";
     const excursion=tpSlById[String(t.positionId)];
@@ -2711,23 +2711,24 @@ function tabTrades(m,a,cur){
     const tpmCloseGap=excursionDollar(t,"gap",excursion);
     const favorable=excursion?.favorableTriggered===true||excursion?.favorableTriggered===1||excursion?.favorableTriggered==="true";
     h+=`<tr class="mono">
+      <td style="color:var(--brass);font-weight:600">${esc(t.comment||"—")}</td>
       <td style="color:var(--mute)">${t.openTime!=null?dtIstStr(t.openTime):"—"}</td>
       <td style="color:var(--mute)">${dtIstStr(t.closeTime)}</td>
       <td style="color:var(--text)">${esc(t.symbol)}</td>
       <td style="color:${t.dir==="BUY"?"var(--up)":"var(--down)"}">${esc(t.dir)}</td>
       <td style="color:var(--mute)">${fmtNum(t.volume)}</td>
-      <td style="color:var(--mute)">${t.openPrice!=null?fmtNum(t.openPrice,5):"—"}</td>
-      <td style="color:var(--mute)">${t.closePrice!=null?fmtNum(t.closePrice,5):"—"}</td>
+      <td style="color:var(--mute)">${t.openPrice!=null?fmtNum(t.openPrice,2):"—"}</td>
+      <td style="color:var(--mute)">${t.closePrice!=null?fmtNum(t.closePrice,2):"—"}</td>
       <td style="color:var(--mute)">${durStr(t.duration)}</td>
+      <td style="color:${exitColor}">${esc(t.exit)}</td>
+      <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
+      <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td>
       <td style="color:var(--up)">${tpmDollar!=null?fmtMoney(tpmDollar,cur):"—"}</td>
       <td style="color:var(--down)">${slmDollar!=null?fmtMoney(slmDollar,cur):"—"}</td>
       <td style="color:${sColor(tpmCloseGap)}">${tpmCloseGap!=null?fmtMoney(tpmCloseGap,cur):"—"}</td>
       <td style="color:${favorable?"var(--up)":"var(--dim)"}">${favorable?"Yes":"—"}${favorable&&excursion.favorableTriggerAt!=null?`<div style="font-size:10px;color:var(--dim)">${dtIstStr(excursion.favorableTriggerAt)}</div>`:""}</td>
       <td style="color:${favorable?"var(--down)":"var(--dim)"}">${favorable?fmtMoney(excursion.favorableRetrace,cur):"—"}${favorable&&excursion.favorableRetraceAt!=null?`<div style="font-size:10px;color:var(--dim)">${dtIstStr(excursion.favorableRetraceAt)}</div>`:""}</td>
-      <td style="color:var(--mute)">${favorable?fmtNum(excursion.favorableRetracePrice,5):"—"}</td>
-      <td style="color:${exitColor}">${esc(t.exit)}</td>
-      <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
-      <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td></tr>`;});
+      <td style="color:var(--mute)">${favorable?fmtNum(excursion.favorableRetracePrice,5):"—"}</td></tr>`;});
   h+=`</table></div>`;
   if(tr.length>state.tradesShown)
     h+=`<div style="text-align:center;margin-top:12px"><button class="btn ghost" onclick="showMoreTrades()">Show ${Math.min(50,tr.length-state.tradesShown)} more</button></div>`;
