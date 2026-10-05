@@ -934,7 +934,8 @@ function standardCommissionFor(symbol,lots){
 }
 function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,excludeBotPrefix=null,commentMatcher=null){
   const dayShift=rules.dayShift??DAY_SHIFT;
-  const commissionFreeView=["S1","S2","CLAUDE_NEW"].includes(state.accountView);
+  // Commission is intentionally excluded from every dashboard view.
+  const commissionFreeView=true;
   const metricDayKey=u=>dayKey(u,dayShift);
   const metricDayStart=()=>{const nowU=Math.floor(Date.now()/1000);return Math.floor((nowU+dayShift)/86400)*86400-dayShift;};
   let source=(dealsRaw||[]).filter(Boolean);
@@ -1098,7 +1099,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   /* ---- AHPR / GHPR (per-trade return on running balance) ---- */
   let runBal=0, hpr=[], g=1;
   for(const d of deals){
-    const net=(d.p||0)+(d.c||0)+(d.sw||0);
+    const net=(d.p||0)+(commissionFreeView?0:d.c||0)+(d.sw||0);
     if(d.ty!==2 && runBal>0){ const r=1+net/runBal; hpr.push(r); g*=r; }
     runBal+=net;
   }
@@ -1153,7 +1154,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   const t0=metricDayStart();
   let prevDayEOD=0, todayHighBal=null, todayLowBal=null, todayHighAt=t0, todayLowAt=t0, run=0;
   for(const d of deals){
-    run += (d.p||0)+(d.c||0)+(d.sw||0);
+    run += (d.p||0)+(commissionFreeView?0:d.c||0)+(d.sw||0);
     if(d.t < t0) prevDayEOD = run;
     else {
       if(todayHighBal==null){ todayHighBal=prevDayEOD; todayLowBal=prevDayEOD; todayHighAt=t0; todayLowAt=t0; }
@@ -1168,7 +1169,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   let tPeak=prevDayEOD, tBal=prevDayEOD, todayDD=0, todayDDMoney=0;
   for(const d of deals){
     if(d.t < t0) continue;
-    tBal += (d.p||0)+(d.c||0)+(d.sw||0);
+    tBal += (d.p||0)+(commissionFreeView?0:d.c||0)+(d.sw||0);
     if(tBal>tPeak) tPeak=tBal;
     const drop=tPeak-tBal;
     if(tPeak>0 && drop>todayDDMoney){ todayDDMoney=drop; todayDD=drop/tPeak*100; }
@@ -1178,7 +1179,7 @@ function computeMetrics(dealsRaw,rules={dayShift:DAY_SHIFT},botPrefix=null,exclu
   const flowEvents = deals.filter(d=>d.ty===2).map(d=>({date:metricDayKey(d.t), amt:d.p||0}));
 
   /* ---- balance timeline for period-start lookups ---- */
-  const timeline=[]; { let b=0; for(const d of deals){ b+=(d.p||0)+(d.c||0)+(d.sw||0); timeline.push({t:d.t,bal:b}); } }
+  const timeline=[]; { let b=0; for(const d of deals){ b+=(d.p||0)+(commissionFreeView?0:d.c||0)+(d.sw||0); timeline.push({t:d.t,bal:b}); } }
   const balBefore = ts => { let b=0; for(const e of timeline){ if(e.t>=ts) break; b=e.bal; } return b; };
 
   /* ---- periods: today / week / month / year (UTC) ---- */
@@ -1952,9 +1953,8 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       stat("PDL",fmtMoney(s.prevDayLowBal,cur),"var(--down)",prevLowTime)+
       stat("TL",fmtMoney(s.todayLowBal,cur),"var(--down)",lowTime)+
       stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)+
-      stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap")+
+      stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before swap")+
       stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
-      stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")+
       stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
       '</div>';
   }
@@ -1975,8 +1975,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       ${stat("Day's high",fmtMoney(s.todayHighBal,cur),hiColor,highTime)}
       ${stat("Day's low",fmtMoney(s.todayLowBal,cur),lowColor,lowTime)}
       ${stat("All-time high",fmtMoney(s.highestBal,cur),null,allHighTime)}
-      ${showSwap?stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before commission and swap"):""}
-      ${stat("Commission",fmtMoney(s.commission,cur),sColor(s.commission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")}
+      ${showSwap?stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before swap"):""}
       ${showSwap?stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost"):""}
       ${showSwap?"":stat("Total P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))}
       ${showDailyExtremes?stat("MPD (max day profit)",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime):""}
@@ -2004,9 +2003,8 @@ function overviewBalancePanel(a,cur){
     stat("PDL",fmtMoney(day.prevDayLowBal,cur),"var(--down)",day.prevDayLowAt!=null?"at "+dtStr(day.prevDayLowAt):"")+
     stat("TL",fmtMoney(m.todayLowBal,cur),"var(--down)",m.todayLowAt!=null?"at "+tmStr(m.todayLowAt):"")+
     stat("TML",fmtMoney(m.mld,cur),sColor(m.mld),m.mldAt!=null?"at "+dtStr(m.mldAt):"")+
-    stat("Profit",fmtMoney(m.grossProfit,cur),sColor(m.grossProfit),"before commission and swap")+
+    stat("Profit",fmtMoney(m.grossProfit,cur),sColor(m.grossProfit),"before swap")+
     stat("Swap",fmtMoney(m.totalSwap,cur),sColor(m.totalSwap),"signed MT5 cost")+
-    stat("Commission",fmtMoney(m.totalCommission,cur),sColor(m.totalCommission),state.accountView==="PROP"?"MT5-reported commission only":"includes standard $5/lot for FX/metals")+
     stat("Final P/L",fmtMoney(overallFinal,cur),sColor(overallFinal))+
     '</div></div>';
 }
@@ -2500,14 +2498,14 @@ function customRangeScopeLabel(){
 function symbolStatsTable(tr,cur,{showPips=true,interactive=true}={}){
   const g={};
   for(const t of tr){ if(!t.symbol)continue;
-    g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false,longs:0,shorts:0};
+    g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,lots:0,pips:0,gross:0,pr:0,hasPips:false,longs:0,shorts:0};
     const e=g[t.symbol]; e.n++; if(t.profit>0)e.w++;
-    e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.commission+=t.commission||0; e.pr+=t.profit;
+    e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.pr+=t.profit;
     if(t.dir==="BUY")e.longs++;else e.shorts++; }
   const list=Object.values(g).sort(compareInstruments);
-  const columnCount=showPips?10:9;
+  const columnCount=showPips?9:8;
   let h=`<div class="tblwrap"><table>
-    <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Long/Short</th><th>Won</th><th>Lots</th>${showPips?"<th>Pips</th>":""}<th>Profit</th><th>Commission</th><th>Final P/L</th></tr>`;
+    <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Long/Short</th><th>Won</th><th>Lots</th>${showPips?"<th>Pips</th>":""}<th>Profit</th><th>Final P/L</th></tr>`;
   if(!list.length) return h+`<tr><td colspan="${columnCount}" style="color:var(--dim);font-size:13px">No trades for this date.</td></tr></table></div>`;
   list.forEach(sy=>{
     const active=interactive&&state.anSymbol===sy.sym;
@@ -2521,12 +2519,11 @@ function symbolStatsTable(tr,cur,{showPips=true,interactive=true}={}){
       <td style="color:var(--mute)">${fmtNum(sy.lots)}</td>
       ${showPips?`<td style="color:${sColor(sy.pips)}">${sy.hasPips?fmtNum(sy.pips,1):"—"}</td>`:""}
       <td style="color:${sColor(sy.gross)}">${fmtMoney(sy.gross,cur)}</td>
-      <td style="color:${sColor(sy.commission)}">${fmtMoney(sy.commission,cur)}</td>
       <td style="color:${sColor(sy.pr)}">${fmtMoney(sy.pr,cur)}</td></tr>`;});
   const total=list.reduce((x,sy)=>({
-    n:x.n+sy.n,w:x.w+sy.w,lots:x.lots+sy.lots,pips:x.pips+sy.pips,gross:x.gross+sy.gross,commission:x.commission+sy.commission,pr:x.pr+sy.pr,
+    n:x.n+sy.n,w:x.w+sy.w,lots:x.lots+sy.lots,pips:x.pips+sy.pips,gross:x.gross+sy.gross,pr:x.pr+sy.pr,
     hasPips:x.hasPips||sy.hasPips,longs:x.longs+sy.longs,shorts:x.shorts+sy.shorts
-  }),{n:0,w:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false,longs:0,shorts:0});
+  }),{n:0,w:0,lots:0,pips:0,gross:0,pr:0,hasPips:false,longs:0,shorts:0});
   h+=`<tr class="mono" style="border-top:2px solid var(--line);font-weight:700;background:#F7F9FE">
     <td style="color:var(--text)">Total</td>
     <td style="color:var(--text)">${total.n}</td>
@@ -2536,7 +2533,6 @@ function symbolStatsTable(tr,cur,{showPips=true,interactive=true}={}){
     <td style="color:var(--text)">${fmtNum(total.lots)}</td>
     ${showPips?`<td style="color:${sColor(total.pips)}">${total.hasPips?fmtNum(total.pips,1):"—"}</td>`:""}
     <td style="color:${sColor(total.gross)}">${fmtMoney(total.gross,cur)}</td>
-    <td style="color:${sColor(total.commission)}">${fmtMoney(total.commission,cur)}</td>
     <td style="color:${sColor(total.pr)}">${fmtMoney(total.pr,cur)}</td></tr>`;
   return h+`</table></div>`;
 }
@@ -2658,9 +2654,9 @@ function commentDateBreakdown(tr,cur){
   const groups={};
   tr.forEach(t=>{
     const key=dayKey(t.closeTime);
-    const g=groups[key]||{symbols:new Set(),n:0,w:0,l:0,lots:0,commission:0,profit:0,first:null,last:null};
+    const g=groups[key]||{symbols:new Set(),n:0,w:0,l:0,lots:0,profit:0,first:null,last:null};
     g.symbols.add(t.symbol||"—"); g.n++; if(t.profit>0)g.w++; else if(t.profit<0)g.l++;
-    g.lots+=t.volume||0; g.commission+=t.commission||0; g.profit+=t.profit||0;
+    g.lots+=t.volume||0; g.profit+=t.profit||0;
     g.first=g.first==null?t.closeTime:Math.min(g.first,t.closeTime); g.last=g.last==null?t.closeTime:Math.max(g.last,t.closeTime);
     groups[key]=g;
   });
@@ -2669,11 +2665,10 @@ function commentDateBreakdown(tr,cur){
     <td style="color:var(--mute)">${[...g.symbols].sort(compareInstruments).map(esc).join(", ")}</td>
     <td>${g.n}</td><td><span style="color:var(--up)">${g.w}</span><span style="color:var(--dim)"> / </span><span style="color:var(--down)">${g.l}</span></td>
     <td style="color:var(--mute)">${fmtNum(g.lots)}</td>
-    <td style="color:${sColor(g.commission)}">${fmtMoney(g.commission,cur)}</td>
     <td style="color:${sColor(g.profit)}">${fmtMoney(g.profit,cur)}</td>
     <td style="color:var(--dim)">${dtIstStr(g.first)}</td><td style="color:var(--dim)">${dtIstStr(g.last)}</td></tr>`).join("");
   return `<div class="panel" style="padding:16px"><div class="sect">Date-wise breakdown <span style="color:var(--dim);text-transform:none;letter-spacing:0">• ${esc(state.fComment)} • trading date in IST</span></div>
-    <div class="tblwrap"><table><tr><th>Date</th><th>Symbols</th><th>Orders</th><th>W / L</th><th>Lots</th><th>Commission</th><th>Final P/L</th><th>First close</th><th>Last close</th></tr>${rows}</table></div></div>`;
+    <div class="tblwrap"><table><tr><th>Date</th><th>Symbols</th><th>Orders</th><th>W / L</th><th>Lots</th><th>Final P/L</th><th>First close</th><th>Last close</th></tr>${rows}</table></div></div>`;
 }
 
 function slmCommentSummary(tr,tpSlById,cur){
@@ -2756,20 +2751,20 @@ function tabTrades(m,a,cur){
   {
     const g={};
     for(const t of trAll){ if(!t.symbol) continue;
-      g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,l:0,tp:0,sl:0,lots:0,pips:0,gross:0,commission:0,pr:0,hasPips:false};
+      g[t.symbol]=g[t.symbol]||{sym:t.symbol,n:0,w:0,l:0,tp:0,sl:0,lots:0,pips:0,gross:0,pr:0,hasPips:false};
       const e=g[t.symbol]; e.n++; if(t.profit>0)e.w++; else if(t.profit<0)e.l++;
       if(t.exit==="TP")e.tp++; if(t.exit==="SL")e.sl++;
-      e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.commission+=t.commission||0; e.pr+=t.profit; }
+      e.lots+=t.volume||0; if(t.pips!=null){e.pips+=t.pips;e.hasPips=true;} e.gross+=t.rawProfit||0; e.pr+=t.profit; }
     const list=Object.values(g).sort(compareInstruments);
     if(list.length){
       const total=list.reduce((a,e)=>({
         n:a.n+e.n,w:a.w+e.w,l:a.l+e.l,tp:a.tp+e.tp,sl:a.sl+e.sl,
-        lots:a.lots+e.lots,gross:a.gross+e.gross,commission:a.commission+e.commission,
+        lots:a.lots+e.lots,gross:a.gross+e.gross,
         pr:a.pr+e.pr
-      }),{n:0,w:0,l:0,tp:0,sl:0,lots:0,gross:0,commission:0,pr:0});
+      }),{n:0,w:0,l:0,tp:0,sl:0,lots:0,gross:0,pr:0});
       h+=`<div class="panel" style="padding:16px"><div class="sect">All instruments <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows exit &amp; date filters • tap to focus</span></div>
         <div class="tblwrap"><table>
-        <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Win %</th><th>TP / SL</th><th>Lots</th><th>Profit</th><th>Commission</th><th>Final P/L</th></tr>`;
+        <tr><th>Symbol</th><th>Trades</th><th>W / L</th><th>Win %</th><th>TP / SL</th><th>Lots</th><th>Profit</th><th>Final P/L</th></tr>`;
       list.forEach(e=>{
         const active=state.fSymbol===e.sym;
         h+=`<tr onclick="setFilter('fSymbol','${esc(e.sym)}')" style="cursor:pointer;${active?"background:#F1F5FF":""}">
@@ -2780,7 +2775,6 @@ function tabTrades(m,a,cur){
           <td class="mono" style="color:var(--mute)">${hasExit?e.tp+" / "+e.sl:"—"}</td>
           <td class="mono" style="color:var(--mute)">${fmtNum(e.lots)}</td>
           <td class="mono" style="color:${sColor(e.gross)}">${fmtMoney(e.gross,cur)}</td>
-          <td class="mono" style="color:${sColor(e.commission)}">${fmtMoney(e.commission,cur)}</td>
           <td class="mono" style="color:${sColor(e.pr)}">${fmtMoney(e.pr,cur)}</td></tr>`;});
       h+=`<tr style="border-top:2px solid var(--line);background:var(--panel-up);font-weight:700">
         <td class="mono" style="color:var(--text)">Total</td>
@@ -2790,7 +2784,6 @@ function tabTrades(m,a,cur){
         <td class="mono" style="color:var(--text)">${hasExit?total.tp+" / "+total.sl:"—"}</td>
         <td class="mono" style="color:var(--text)">${fmtNum(total.lots)}</td>
         <td class="mono" style="color:${sColor(total.gross)}">${fmtMoney(total.gross,cur)}</td>
-        <td class="mono" style="color:${sColor(total.commission)}">${fmtMoney(total.commission,cur)}</td>
         <td class="mono" style="color:${sColor(total.pr)}">${fmtMoney(total.pr,cur)}</td></tr>`;
       h+=`</table></div></div>`;
     }
@@ -2800,7 +2793,6 @@ function tabTrades(m,a,cur){
   const W=tr.filter(t=>t.profit>0).length, L=tr.filter(t=>t.profit<0).length;
   const pr=tr.reduce((sm,t)=>sm+t.profit,0);
   const lots=tr.reduce((sm,t)=>sm+(t.volume||0),0);
-  const commission=tr.reduce((sm,t)=>sm+(t.commission||0),0);
   const sl=tr.filter(t=>t.exit==="SL").length, tp=tr.filter(t=>t.exit==="TP").length;
   const closedMoveDollarValues=tr.map(t=>{
     const rate=realizedPipDollarRate(t);
@@ -2825,7 +2817,6 @@ function tabTrades(m,a,cur){
     ${stat("Winners",W,"var(--up)",tr.length?(W/tr.length*100).toFixed(1)+"%":"")}
     ${stat("Losers",L,"var(--down)",tr.length?(L/tr.length*100).toFixed(1)+"%":"")}
     ${stat("TP / SL hits",hasExit?tp+" / "+sl:"—",null,hasExit?"":"needs EA v1.2")}
-    ${stat("Commission",fmtMoney(commission,cur),sColor(commission))}
     ${stat("Final P/L",fmtMoney(pr,cur),sColor(pr))}
     ${stat("Closed move",closedMoveDollar!=null?fmtMoney(closedMoveDollar,cur):"—",sColor(closedMoveDollar),"realized movement")}
     ${stat("Avg TPM",avgTpm!=null?fmtMoney(avgTpm,cur):"—","var(--up)","all filtered orders")}
@@ -2841,7 +2832,7 @@ function tabTrades(m,a,cur){
   const shown=tr.slice(0,state.tradesShown);
   h+=`<div class="panel" style="padding:16px"><div class="sect">Trade history (${tr.length}${tr.length!==m.allTrades.length?" of "+m.allTrades.length:""} closed) — IST <span style="color:var(--dim);text-transform:none;letter-spacing:0">• TPM/SLM are per-order pip excursions from entry</span></div>
     <div class="tblwrap"><table>
-    <tr><th>Comment</th><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>Close by</th><th>Commission</th><th>Final P/L</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−CLOSE<br>($)</th></tr>`;
+    <tr><th>Comment</th><th>Open (IST)</th><th>Close (IST)</th><th>Symbol</th><th>Side</th><th>Lots</th><th>Entry</th><th>Exit</th><th>Duration</th><th>Close by</th><th>Final P/L</th><th>TPM<br>($)</th><th>SLM<br>($)</th><th>TPM−CLOSE<br>($)</th></tr>`;
   shown.forEach(t=>{
     const exitColor=t.exit==="TP"?"var(--up)":t.exit==="SL"?"var(--down)":t.exit==="SO"?"#E8B36A":"var(--dim)";
     const excursion=tpSlById[String(t.positionId)];
@@ -2860,7 +2851,6 @@ function tabTrades(m,a,cur){
       <td style="color:var(--mute)">${t.closePrice!=null?fmtNum(t.closePrice,2):"—"}</td>
       <td style="color:var(--mute)">${durStr(t.duration)}</td>
       <td style="color:${exitColor}">${esc(t.exit)}</td>
-      <td style="color:${sColor(t.commission)}">${fmtMoney(t.commission,cur)}</td>
       <td style="color:${sColor(t.profit)}">${fmtMoney(t.finalProfit??t.profit,cur)}</td>
       <td style="color:var(--up)">${tpmDollar!=null?fmtMoney(tpmDollar,cur):"—"}</td>
       <td style="color:var(--down)">${slmDollar!=null?fmtMoney(slmDollar,cur):"—"}</td>
