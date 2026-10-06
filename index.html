@@ -44,6 +44,7 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 .sp3{grid-column:span 3!important}.sp4{grid-column:span 4!important}.sp5{grid-column:span 5!important}
 .sp6{grid-column:span 6!important}.sp7{grid-column:span 7!important}.sp8{grid-column:span 8!important}
 .overview-hour-panels{grid-column:span 12;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0}
+.overview-summary-sections{grid-column:span 12;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0}
 @media(max-width:1150px){
   .sp7,.sp8{grid-column:span 12!important}
   .sp3,.sp4,.sp5,.sp6{grid-column:span 6!important}
@@ -51,6 +52,7 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 @media(max-width:740px){
   .sp3,.sp4,.sp5,.sp6,.sp7,.sp8{grid-column:span 12!important}
   .overview-hour-panels{grid-template-columns:1fr}
+  .overview-summary-sections{grid-template-columns:1fr}
 }
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
@@ -2419,7 +2421,7 @@ function accountTabHTML(login,a,color,summaryAccounts=null){
   return h;
 }
 
-function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=false){
+function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=false,replaceDailyLowStats=false){
   if(showDailyExtremes){
     const headerStat=(lbl,val,color,sub)=>'<div class="stat" style="padding:0;min-width:145px"><div class="lbl">'+lbl+'</div><div class="val" style="color:'+(color||"var(--text)")+'">'+val+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';
     const balanceSub=esc(broker||"");
@@ -2432,6 +2434,18 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
     const allLowTime=s.lowestBalAt!=null?"at "+dtStr(s.lowestBalAt):"";
     const mpdTime=s.mpdAt!=null?"at "+dtStr(s.mpdAt):"";
     const mldTime=s.mldAt!=null?"at "+dtStr(s.mldAt):"";
+    const dailyLowStats=replaceDailyLowStats
+      ? stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before swap")+
+        stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
+        stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
+        stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)
+      : stat("ATL",fmtMoney(s.lowestBal,cur),"var(--down)",allLowTime)+
+        stat("PDL",fmtMoney(s.prevDayLowBal,cur),"var(--down)",prevLowTime)+
+        stat("TL",fmtMoney(s.todayLowBal,cur),"var(--down)",lowTime)+
+        stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime);
+    const dailyFinalStats=replaceDailyLowStats?"":stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before swap")+
+      stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
+      stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit));
     return '<div style="padding:14px 16px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:18px;overflow-x:auto;white-space:nowrap"><div class="sect" style="margin-bottom:0;flex:0 0 auto">Balances</div><div style="display:flex;gap:24px;align-items:flex-start;flex:0 0 auto">'+
       headerStat("Balance",fmtMoney(s.balance,cur),null,balanceSub)+
       headerStat("Prev day EOD",fmtMoney(s.prevDayEOD,cur),null,prevEodTime)+
@@ -2440,13 +2454,7 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       stat("PDH",fmtMoney(s.prevDayHighBal,cur),"var(--up)",prevHighTime)+
       stat("TH",fmtMoney(s.todayHighBal,cur),"var(--up)",highTime)+
       stat("TMP",fmtMoney(s.mpd,cur),sColor(s.mpd),mpdTime)+
-      stat("ATL",fmtMoney(s.lowestBal,cur),"var(--down)",allLowTime)+
-      stat("PDL",fmtMoney(s.prevDayLowBal,cur),"var(--down)",prevLowTime)+
-      stat("TL",fmtMoney(s.todayLowBal,cur),"var(--down)",lowTime)+
-      stat("TML",fmtMoney(s.mld,cur),sColor(s.mld),mldTime)+
-      stat("Profit",fmtMoney(s.grossProfit,cur),sColor(s.grossProfit),"before swap")+
-      stat("Swap",fmtMoney(s.swap,cur),sColor(s.swap),"signed MT5 cost")+
-      stat("Final P/L",fmtMoney(s.totalProfit,cur),sColor(s.totalProfit))+
+      dailyLowStats+dailyFinalStats+
       '</div>';
   }
   const g3=showSwap?'grid-template-columns:repeat(4,minmax(0,1fr))':'grid-template-columns:repeat(auto-fit,minmax(120px,1fr))';
@@ -2473,9 +2481,10 @@ function balanceStatsInner(s,cur,broker="",showSwap=false,showDailyExtremes=fals
       ${showDailyExtremes?stat("MLD (max day loss)",fmtMoney(s.mld,cur),sColor(s.mld),mldTime):""}
     </div>`;
 }
-function balanceSnapshotPanel(a,cur,showSwap=false){
+function balanceSnapshotPanel(a,cur,showSwap=false,heading="Balances"){
   const m=a.metrics,info=a.info;
-  return `<div class="panel sp6">${balanceStatsInner({balance:info?.balance,prevDayEOD:m.prevDayEOD,prevDayEODAt:m.prevDayEODAt,todayHighBal:m.todayHighBal,todayLowBal:m.todayLowBal,todayHighAt:m.todayHighAt,todayLowAt:m.todayLowAt,highestBal:m.highestBal,highestBalAt:m.highestBalAt,grossProfit:m.grossProfit,commission:m.totalCommission,swap:m.totalSwap,totalProfit:m.finalProfit??m.profit},cur,info?.broker,showSwap)}</div>`;
+  const inner=balanceStatsInner({balance:info?.balance,prevDayEOD:m.prevDayEOD,prevDayEODAt:m.prevDayEODAt,todayHighBal:m.todayHighBal,todayLowBal:m.todayLowBal,todayHighAt:m.todayHighAt,todayLowAt:m.todayLowAt,highestBal:m.highestBal,highestBalAt:m.highestBalAt,grossProfit:m.grossProfit,commission:m.totalCommission,swap:m.totalSwap,totalProfit:m.finalProfit??m.profit},cur,info?.broker,showSwap);
+  return `<div class="panel sp6">${heading==="Balances"?inner:inner.replace(">Balances</div>",">${heading}</div>")}</div>`;
 }
 function allTimeDayExtremes(m){
   let maxProfit=null,maxProfitAt=null,maxLoss=null,maxLossAt=null;
@@ -2598,10 +2607,15 @@ function tabOverview(login,a,color,cur){
   const inlineStat=(label,value,color)=>`<span style="color:var(--mute);font-size:13px;white-space:nowrap">${label} <b class="mono" style="color:${color||"var(--text)"};font-weight:600">${value}</b></span>`;
   let h='';
   // Row 1: Balances | Win & loss/session
-  h+=overviewBalancePanel(a,cur);
-  h+=`<div class="panel sp6" style="padding:16px">${streakStatsInner(tradeStats((m.allTrades||[]).slice().sort((x,y)=>(x.closeTime??0)-(y.closeTime??0))),cur,"all-time history")}</div>`;
+  const overviewHistoryTrades=analysisTradesForWindow(m,null,null);
+  h+=allTimeOverviewSection(m,cur,info,overviewHistoryTrades);
+  const overviewDay=lastTradingDates(1)[0];
+  if(overviewDay) h+=dailyAnalysisSection(m,cur,info,overviewDay);
+  h+=`<div class="overview-summary-sections">`;
+  const overviewSymbolTrades=tradesInRange(m,'wl');
+  h+=`<div class="panel" style="padding:16px"><div class="sect" style="margin-bottom:10px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows Win &amp; loss date filter</span></div>${symbolStatsTable(overviewSymbolTrades,cur,{showPips:false,interactive:false})}</div>`;
   const wlSt=tradeStats(tradesInRange(m,'wl'));
-  h+=`<div class="panel sp6" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center">
+  h+=`<div class="panel" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:center">
     <div style="display:flex;align-items:center;gap:18px;flex:1;min-width:0;flex-wrap:wrap">
       <div class="sect" style="margin-bottom:0">Win &amp; loss</div>
       <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
@@ -2648,10 +2662,7 @@ function tabOverview(login,a,color,cur){
   }
   h+=`</div>`;
   // Overall instrument splitup follows the combined Win & loss/session panel.
-  const overviewSymbolTrades=tradesInRange(m,'wl');
-  h+=`<div class="panel sp6" style="padding:16px"><div class="sect" style="margin-bottom:10px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows Win &amp; loss date filter</span></div>${symbolStatsTable(overviewSymbolTrades,cur,{showPips:false,interactive:false})}</div>`;
-  // Open positions follows the instrument splitup and uses the same sp6 width.
-  h+=positionsHTML(a,cur,openPL,"sp6");
+  h+=`</div>`;
   // Hourly view below the session/positions row, split into two 12-hour panels.
   {
     const hourTr=tradesInRange(m,'sm');
@@ -2690,6 +2701,8 @@ function tabOverview(login,a,color,cur){
     }
     h+=`</div>`;
   }
+  // Open positions follows the paired P/L-by-hour section.
+  h+=positionsHTML(a,cur,openPL,"sp6");
   // Row 4 (last): Periods
   h+=`<div class="panel" style="padding:16px"><div class="sect">Periods</div><div class="tblwrap"><table>
     <tr><th></th><th>Gain</th><th>Profit</th><th>Pips</th><th>Win %</th><th>Trades</th><th>Lots</th></tr>`;
@@ -3049,7 +3062,7 @@ function symbolStatsTable(tr,cur,{showPips=true,interactive=true}={}){
     <td style="color:${sColor(total.pr)}">${fmtMoney(total.pr,cur)}</td></tr>`;
   return h+`</table></div>`;
 }
-function symbolDailyProfitLossTable(tr,cur){
+function symbolDailyProfitLossTable(tr,cur,scopeLabel="Day's total"){
   const g={};
   for(const t of tr){
     if(!t.symbol) continue;
@@ -3061,7 +3074,7 @@ function symbolDailyProfitLossTable(tr,cur){
   }
   const list=Object.values(g).sort((a,b)=>compareInstruments(a.sym,b.sym));
   let h=`<div class="tblwrap"><table>
-    <tr><th>Symbol</th><th>Win rate</th><th>Day's total profit</th><th>Day's total loss</th><th>Final P/L</th></tr>`;
+    <tr><th>Symbol</th><th>Win rate</th><th>${scopeLabel} profit</th><th>${scopeLabel} loss</th><th>Final P/L</th></tr>`;
   if(!list.length) return h+`<tr><td colspan="5" style="color:var(--dim);font-size:13px">No trades for this date.</td></tr></table></div>`;
   list.forEach(sy=>{
     h+=`<tr class="mono">
@@ -3122,10 +3135,41 @@ function dailyAnalysisSection(m,cur,info,d){
   const s={...balanceForDay(m,d.start),...realizedDayExtremes(tr,d.start,d.start+86400),grossProfit:tr.reduce((sum,t)=>sum+(t.rawProfit||0),0),commission:tr.reduce((sum,t)=>sum+(t.commission||0),0),swap:tr.reduce((sum,t)=>sum+(t.swap||0),0),totalProfit:tr.reduce((sum,t)=>sum+t.profit,0)};
   return `<div class="panel sp6" style="padding:16px">
     <div class="sect">${esc(d.key)} <span style="color:var(--dim);text-transform:none;letter-spacing:0">• daily balance and instrument split</span></div>
-    ${balanceStatsInner(s,cur,info?.broker,true,true)}
+    ${balanceStatsInner(s,cur,info?.broker,true,true,true)}
     ${streakStatsInner(tradeStats(tr),cur,d.key)}
     <div class="sect" style="margin:14px 0 8px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows instrument filter</span></div>
     ${symbolDailyProfitLossTable(tr,cur)}
+  </div>`;
+}
+function allTimeOverviewSection(m,cur,info,tr){
+  const ext=allTimeDayExtremes(m);
+  const first=m?.balanceTimeline?.[0];
+  const at=ts=>ts!=null?`at ${dtStr(ts)}`:"";
+  const money=value=>value==null?"—":fmtMoney(value,cur);
+  const valueColor=value=>value==null?"var(--mute)":sColor(value);
+  const headerStat=(lbl,val,color,sub)=>`<div class="stat" style="padding:0;min-width:145px"><div class="lbl">${lbl}</div><div class="val" style="color:${color||"var(--text)"}">${val}</div>${sub?`<div class="sub">${sub}</div>`:""}</div>`;
+  const orderedTrades=(tr||[]).slice().sort((x,y)=>(x.closeTime??0)-(y.closeTime??0));
+  return `<div class="panel sp6" style="padding:16px">
+    <div class="sect">All-time history <span style="color:var(--dim);text-transform:none;letter-spacing:0">• balance and instrument split</span></div>
+    <div style="padding:0 0 10px;display:flex;justify-content:space-between;align-items:flex-start;gap:18px;overflow-x:auto;white-space:nowrap">
+      <div class="sect" style="margin-bottom:0;flex:0 0 auto">Balances</div>
+      <div style="display:flex;gap:24px;align-items:flex-start;flex:0 0 auto">
+        ${headerStat("Balance",money(info?.balance),null,esc(info?.broker||""))}
+        ${headerStat("First recorded",money(first?.bal),null,at(first?.t))}
+      </div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+      ${stat("ATH",money(m?.highestBal),"var(--up)",at(m?.highestBalAt))}
+      ${stat("ATL",money(m?.lowestBal),"var(--down)",at(m?.lowestBalAt))}
+      ${stat("Max day profit",money(ext.maxProfit),valueColor(ext.maxProfit),at(ext.maxProfitAt))}
+      ${stat("Max day loss",money(ext.maxLoss),valueColor(ext.maxLoss),at(ext.maxLossAt))}
+      ${stat("Profit",money(m?.grossProfit),sColor(m?.grossProfit),"before swap")}
+      ${stat("Swap",money(m?.totalSwap),sColor(m?.totalSwap),"signed MT5 cost")}
+      ${stat("Final P/L",money(m?.finalProfit??m?.profit),sColor(m?.finalProfit??m?.profit))}
+    </div>
+    <div style="margin-top:10px">${streakStatsInner(tradeStats(orderedTrades),cur,"all-time history")}</div>
+    <div class="sect" style="margin:14px 0 8px">Symbols <span style="color:var(--dim);text-transform:none;letter-spacing:0">• follows instrument filter</span></div>
+    ${symbolDailyProfitLossTable(orderedTrades,cur,"Total")}
   </div>`;
 }
 function tabWinners(m,cur,color,a){
