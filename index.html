@@ -79,6 +79,15 @@ main{max-width:1720px;margin:0 auto;padding:18px 18px}
 .claude-new-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-content:start}
 .claude-new-pair-empty{min-height:112px;visibility:hidden}
 .claude-new-paired-scroll+.claude-new-paired-scroll{border-top:1px solid var(--line);padding-top:10px}
+.v3-comparison-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:12px;padding:2px 2px 12px}
+.v3-tile-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0}
+.v3-tile-side{display:flex;flex-direction:column;gap:5px;min-width:0}
+.v3-tile-pair .chip{min-width:0;width:100%;flex:1;padding:8px 7px;border-radius:12px}
+.v3-tile-pair .chip .nm{font-size:12px;overflow-wrap:anywhere}
+.v3-tile-pair .chip .eq{font-size:14px}
+.v3-tile-pair .chip .mono{font-size:12px!important;margin-top:3px!important}
+.v3-tile-missing{display:grid;place-content:center;min-height:90px;padding:8px;text-align:center;font-size:12px;color:var(--dim);border:1px dashed var(--line);border-radius:12px}
+.v3-summary .account-start{border-left:2px solid var(--line)}
 .dashboard-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .dashboard-switch{display:flex;align-items:center;gap:9px;padding:8px 10px 8px 12px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;box-shadow:0 5px 16px rgba(74,151,181,.10);backdrop-filter:blur(16px)}
 .dashboard-switch label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
@@ -385,6 +394,21 @@ const v3CommentLabel=comment=>{
 function isV3Comment(comment){
   return !!v3CommentLabel(comment)||normalizedCommentKey(comment)==="v31555";
 }
+const V3_COMPARISON_ACCOUNTS=[{suffix:"3570",role:"Source"},{suffix:"3456",role:"Reverse copy"}];
+function v3ComparisonPairs(accounts){
+  const tiles=Object.entries(accounts||{}).filter(([login,a])=>String(login).includes(":V3:")&&a?.info?.groupTile);
+  return V3_COMMENT_ORDER.map(comment=>({comment,sides:V3_COMPARISON_ACCOUNTS.map(({suffix,role})=>{
+    const tile=tiles.find(([login,a])=>accountSuffix(String(login).split(":")[0])===suffix&&a.info.sourceComment===comment);
+    return {suffix,role,login:tile?.[0],account:tile?.[1]};
+  })}));
+}
+function v3ComparisonTilesHTML(accounts,renderTile){
+  return `<div class="v3-comparison-grid">${v3ComparisonPairs(accounts).map(pair=>`<div class="v3-tile-pair" role="group" aria-label="${esc(pair.comment)} comparison">${pair.sides.map(side=>`<div class="v3-tile-side">${side.login?renderTile(side.login):`<div class="v3-tile-missing">${esc(pair.comment)} • ${side.suffix}<br>Account not available</div>`}</div>`).join("")}</div>`).join("")}</div>`;
+}
+function isClaude35DashboardComment(comment){
+  // Keep Claude V3 3M in its dedicated dashboard, not the combined view.
+  return v3CommentLabel(comment)!=="Claude V3 3M" && (isClaude35Comment(comment)||isV3Comment(comment));
+}
 function isTViewComment(comment){
   return /^ETView/i.test(String(comment||"").trim());
 }
@@ -428,7 +452,7 @@ function accountsForView(accounts){
   else if(state.accountView==="CLAUDE_TV2") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3570"));
   else if(state.accountView==="CLAUDE_EA") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([,a])=>Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&/^Claude\s+EA(?:\s|$)/i.test(String(d.cm||"").trim()))));
   else if(state.accountView==="CLAUDE_R") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>["3570","3456"].includes(accountSuffix(login))));
-  else if(state.accountView==="V3") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3570"));
+  else if(state.accountView==="V3") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>V3_COMPARISON_ACCOUNTS.some(a=>a.suffix===accountSuffix(login))));
   else if(state.accountView==="CLAUDE_3M_5M") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3570"));
   else if(state.accountView==="CLAUDE_NEW") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3570"));
   else if(state.accountView==="STAR_CT") scoped=Object.fromEntries(Object.entries(accounts||{}).filter(([login])=>accountSuffix(login)==="3456"));
@@ -578,17 +602,18 @@ function accountsForView(accounts){
       CLAUDE_R_TILES.forEach(tile=>{out[tile.key]=makeClaudeRView(tile.match,tile.label);});
       return;
     }
-    if(state.accountView==="V3" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
+    if(state.accountView==="V3"){
+      const deals=Array.isArray(a.deals)?a.deals:[];
+      const totalProfit=computeMetrics(deals,a.rules)?.profit||0;
       const matcher=c=>isV3Comment(c);
       const makeV3View=(viewMatcher,viewLabel,groupTile=false,sourceComment=null)=>{
-        const metrics=computeMetrics(a.deals,a.rules,null,null,viewMatcher);
+        const metrics=computeMetrics(deals,a.rules,null,null,viewMatcher);
         const positions=(a.positions||[]).filter(p=>viewMatcher(p?.comment));
-        const totalProfit=computeMetrics(a.deals,a.rules)?.profit||0;
         const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
         const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
         const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
-        const matchedPositionIds=new Set(a.deals.filter(d=>d.ty!==2&&viewMatcher(d.cm)).map(d=>String(d.id||"")));
-        const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
+        const matchedPositionIds=new Set(deals.filter(d=>d.ty!==2&&viewMatcher(d.cm)).map(d=>String(d.id||"")));
+        const matchedDeals=deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
         return {...a,info:{...a.info,...(sourceComment?{sourceComment}:{}),...(viewLabel?{label:viewLabel}:{}),...(groupTile?{groupTile:true}:{}),balance,equity},metrics,positions,
           dailyFloating:floatingForCommentMatcher(a,viewMatcher),deals:matchedDeals};
       };
@@ -603,7 +628,7 @@ function accountsForView(accounts){
     }
     if(state.accountView==="CLAUDE_3M_5M" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
       const cmOf=c=>String(c||"").trim();
-      const combinedMatcher=c=>isClaude35Comment(c)||isV3Comment(c);
+      const combinedMatcher=isClaude35DashboardComment;
       const periodMatcher=(period)=>c=>combinedMatcher(c)&&new RegExp(`\\b${period}\\b`,"i").test(cmOf(c));
       const makeClaude35View=(matcher,viewLabel,groupTile=false)=>{
         const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
@@ -624,7 +649,7 @@ function accountsForView(accounts){
         const matcher=periodMatcher(period);
         out[`${login}:Claude35:group${period}`]=makeClaude35View(matcher,`Master • ${period}`,true);
       });
-      out[`${login}:Claude35:groupV3`]=makeClaude35View(c=>isV3Comment(c),"Claude V3 • 1555",true);
+      out[`${login}:Claude35:groupV3`]=makeClaude35View(c=>combinedMatcher(c)&&isV3Comment(c),"Claude V3 • 1555",true);
       return;
     }
     if(state.accountView==="CLAUDE_NEW" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
@@ -1806,8 +1831,7 @@ function render(){
       const groupLogins=logins.filter(l=>String(l).includes(":")&&acc[l]?.info?.groupTile);
       html+=`<div class="chips compact-two-row">${groupLogins.map(l=>renderTile(l)).join("")}</div>`;
     } else if(state.accountView==="V3"){
-      const groupLogins=logins.filter(l=>String(l).includes(":")&&acc[l]?.info?.groupTile);
-      html+=`<div class="chips compact-two-row">${groupLogins.map(l=>renderTile(l)).join("")}</div>`;
+      html+=v3ComparisonTilesHTML(acc,renderTile);
     } else if(["CLAUDE_NEW","CLAUDE_R","CLAUDE_TV2","S1","S2"].includes(state.accountView)){
       const accountOrder=state.accountView==="S2"?["7511"]:state.accountView==="CLAUDE_TV2"?["3570"]:["3570"];
       const mainLogins=accountOrder.map(suffix=>logins.find(l=>!String(l).includes(":")&&accountSuffix(l)===suffix)).filter(Boolean);
@@ -1842,7 +1866,7 @@ function render(){
       if(state.accountView==="GFT"||state.accountView==="ORDERFILL"||state.accountView==="CLAUDE"||state.accountView==="CLAUDE_EA"||state.accountView==="CLAUDE_TV2"||state.accountView==="CLAUDE_3M_5M"||state.accountView==="V3"||state.accountView==="CLAUDE_NEW"||state.accountView==="CLAUDE_R"||state.accountView==="STAR_CT"||state.accountView==="S1"||state.accountView==="S2"||state.accountView==="TVIEW"||state.accountView==="OVERALL"||state.accountView==="EMA921"||state.accountView==="MARVELS"||state.accountView==="DC"){
         // The GFT All accounts tile is the reference view. Use the unfiltered
         // source account for its detail tabs instead of a synthetic tile.
-        const sourceLogin=logins.find(l=>!String(l).includes(":"))||logins[0];
+        const sourceLogin=(state.accountView==="V3"&&logins.find(l=>!String(l).includes(":")&&accountSuffix(l)==="3570"))||logins.find(l=>!String(l).includes(":"))||logins[0];
         const source=acc[sourceLogin];
         html+=tabsHTML();
         const color=PALETTE[logins.indexOf(sourceLogin)%PALETTE.length];
@@ -1902,8 +1926,8 @@ function dashboardToolbar(allAcc){
     if(["3570","3456"].includes(accountSuffix(login))) { counts.CLAUDE++; if(accountSuffix(login)!=="3456") counts.CLAUDE_NEW++; counts.CLAUDE_R++; counts.MARVELS++; counts.DC++; }
     if(Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&/^Claude\s+EA(?:\s|$)/i.test(String(d.cm||"").trim()))) counts.CLAUDE_EA++;
     if(accountSuffix(login)==="3570"&&Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&claudeTV2Scenario(d.cm,accountSuffix(login)))) counts.CLAUDE_TV2++;
-    if(accountSuffix(login)==="3570"&&Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&(isClaude35Comment(d.cm)||isV3Comment(d.cm)))) counts.CLAUDE_3M_5M++;
-    if(accountSuffix(login)==="3570"&&Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&isV3Comment(d.cm))) counts.V3++;
+    if(accountSuffix(login)==="3570"&&Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&isClaude35DashboardComment(d.cm))) counts.CLAUDE_3M_5M++;
+    if(V3_COMPARISON_ACCOUNTS.some(a=>a.suffix===accountSuffix(login))&&((Array.isArray(a?.deals)&&a.deals.some(d=>d.ty!==2&&isV3Comment(d.cm)))||(Array.isArray(a?.positions)&&a.positions.some(p=>isV3Comment(p.comment))))) counts.V3++;
     if(accountSuffix(login)==="3456") counts.STAR_CT++;
     if(accountSuffix(login)==="3570") counts.S1++;
     if(accountSuffix(login)==="7511") counts.S2++;
@@ -2370,7 +2394,8 @@ function claude35SummaryTabHTML(accounts){
   const tiles=Object.entries(accounts||{})
     .filter(([login,a])=>(String(login).includes(":Claude35:")||String(login).includes(":V3:"))&&a?.info?.groupTile)
     .sort(([,a],[,b])=>String(a?.info?.label||"").localeCompare(String(b?.info?.label||""),undefined,{numeric:true,sensitivity:"base"}));
-  const selectedTile=tiles.find(([login])=>login===state.selected);
+  // Claude V3 Summary compares every comment tile; other tabs remain tile-specific.
+  const selectedTile=state.accountView==="V3"?null:tiles.find(([login])=>login===state.selected);
   const focusTiles=selectedTile?[selectedTile]:tiles;
   const filterTrades=(trades,a)=>{
     const list=(trades||[]).slice();
@@ -2432,7 +2457,30 @@ function claude35SummaryTabHTML(accounts){
         ${state.summaryPreset==="CUSTOM"?`<input type="date" style="max-width:140px;padding:7px 9px;font-size:12px" value="${esc(state.summaryFrom)}" onchange="setSummaryFilter('summaryFrom',this.value)"><span style="font-size:12px;color:var(--dim)">to</span><input type="date" style="max-width:140px;padding:7px 9px;font-size:12px" value="${esc(state.summaryTo)}" onchange="setSummaryFilter('summaryTo',this.value)">`:""}
       </div>
     </div>
-    <div style="font-size:12px;color:var(--dim);margin:10px 0 12px">Showing ${dateLabel.toLowerCase()} closed trades for ${selectedTile?`the selected ${esc(String(selectedTile[1]?.info?.label||"Master"))} tile`:`all grouped tiles`}.</div>`;
+    <div style="font-size:12px;color:var(--dim);margin:10px 0 12px">Showing ${dateLabel.toLowerCase()} closed trades for ${selectedTile?`the selected ${esc(String(selectedTile[1]?.info?.label||"Master"))} tile`:state.accountView==="V3"?"all Claude V3 tiles together":"all grouped tiles"}.</div>`;
+  if(state.accountView==="V3"&&prepared.length){
+    const pairs=v3ComparisonPairs(accounts);
+    const totals=V3_COMPARISON_ACCOUNTS.map(()=>[]);
+    const accountForSide=index=>pairs.find(pair=>pair.sides[index].account)?.sides[index].account;
+    const statsCells=(trades,account)=>{
+      if(!account) return `<td colspan="7" class="account-start" style="color:var(--dim)">Account not available</td>`;
+      const s=statsForTrades(trades),cur=account.info?.currency||"USD";
+      return `<td class="mono account-start">${s.total}</td><td class="mono">${s.buy}/${s.sell}</td><td class="mono">${s.tp}/${s.sl}</td><td class="mono">${s.other} (${s.otherWins}/${s.otherLosses})</td><td class="mono" style="color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td><td class="mono" style="color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td><td class="mono" style="color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td>`;
+    };
+    const columns=["Total orders","Buy/Sell","TP/SL","Other exits (W/L)","Win %","Loss rate","P/L"];
+    h+=`<div class="tblwrap"><table class="v3-summary"><tr><th rowspan="2">Prefix</th><th rowspan="2">Comment</th>${V3_COMPARISON_ACCOUNTS.map(side=>`<th colspan="7" class="account-start">${side.role} • ${side.suffix}</th>`).join("")}</tr><tr>${V3_COMPARISON_ACCOUNTS.map(()=>columns.map((label,i)=>`<th${i===0?' class="account-start"':""}>${label}</th>`).join("")).join("")}</tr>`;
+    pairs.forEach(pair=>{
+      h+=`<tr><td style="font-weight:600;white-space:nowrap">Claude V3</td><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(pair.comment)}</td>`;
+      pair.sides.forEach((side,index)=>{
+        const trades=filterTrades(side.account?.metrics?.allTrades||[],side.account);
+        totals[index].push(...trades);
+        h+=statsCells(trades,side.account);
+      });
+      h+=`</tr>`;
+    });
+    h+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td colspan="2">Total</td>${totals.map((trades,index)=>statsCells(trades,accountForSide(index))).join("")}</tr></table></div>`;
+    return h+`<div style="font-size:12px;color:var(--dim);margin-top:10px">Matched by comment, using each account’s received history and actual trade direction and P/L. Counts may differ while copy trades are open or history is still updating. Win/loss rates use realized closed-trade P/L.</div></div>`;
+  }
   if(!prepared.length){
     h+=`<div class="tblwrap"><table><tr><td style="color:var(--dim);font-size:13px">No ${state.accountView==="V3"?"Claude V3":"3M, 5M, or V3"} trade data available.</td></tr></table></div>`;
   } else {
@@ -2445,8 +2493,10 @@ function claude35SummaryTabHTML(accounts){
         const s=statsForTrades(group.trades); allTrades.push(...group.trades);
         h+=`<tr><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(tileLabel)}</td><td style="font-weight:600;white-space:nowrap">${esc(group.prefix)}</td><td style="font-weight:600;color:var(--brass);white-space:nowrap">${esc(group.comment)}</td><td class="mono">${s.total}</td><td class="mono">${s.buy}/${s.sell}</td><td class="mono">${s.tp}/${s.sl}</td><td class="mono">${s.other} (${s.otherWins}/${s.otherLosses})</td><td class="mono" style="color:${s.wins?"var(--up)":"var(--mute)"}">${fmtPct(s.winRate,1)}</td><td class="mono" style="color:${s.losses?"var(--down)":"var(--mute)"}">${fmtPct(s.lossRate,1)}</td><td class="mono" style="color:${sColor(s.profit)}">${fmtMoney(s.profit,cur)}</td></tr>`;
       });
-      const tileStats=statsForTrades(data.trades);
-      h+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td colspan="3">${esc(tileLabel)} Total</td><td class="mono">${tileStats.total}</td><td class="mono">${tileStats.buy}/${tileStats.sell}</td><td class="mono">${tileStats.tp}/${tileStats.sl}</td><td class="mono">${tileStats.other} (${tileStats.otherWins}/${tileStats.otherLosses})</td><td class="mono">${fmtPct(tileStats.winRate,1)}</td><td class="mono">${fmtPct(tileStats.lossRate,1)}</td><td class="mono" style="color:${sColor(tileStats.profit)}">${fmtMoney(tileStats.profit,cur)}</td></tr>`;
+      if(state.accountView!=="V3"){
+        const tileStats=statsForTrades(data.trades);
+        h+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td colspan="3">${esc(tileLabel)} Total</td><td class="mono">${tileStats.total}</td><td class="mono">${tileStats.buy}/${tileStats.sell}</td><td class="mono">${tileStats.tp}/${tileStats.sl}</td><td class="mono">${tileStats.other} (${tileStats.otherWins}/${tileStats.otherLosses})</td><td class="mono">${fmtPct(tileStats.winRate,1)}</td><td class="mono">${fmtPct(tileStats.lossRate,1)}</td><td class="mono" style="color:${sColor(tileStats.profit)}">${fmtMoney(tileStats.profit,cur)}</td></tr>`;
+      }
     });
     const total=statsForTrades(allTrades),cur=prepared[0]?.tile?.info?.currency||"USD";
     h+=`<tr style="border-top:2px solid var(--line);font-weight:700"><td colspan="3">Total</td><td class="mono">${total.total}</td><td class="mono">${total.buy}/${total.sell}</td><td class="mono">${total.tp}/${total.sl}</td><td class="mono">${total.other} (${total.otherWins}/${total.otherLosses})</td><td class="mono">${fmtPct(total.winRate,1)}</td><td class="mono">${fmtPct(total.lossRate,1)}</td><td class="mono" style="color:${sColor(total.profit)}">${fmtMoney(total.profit,cur)}</td></tr></table></div>`;
