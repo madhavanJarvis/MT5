@@ -368,9 +368,22 @@ function isClaudeNewComment(comment){
 function isClaude35Comment(comment){
   return isClaudeNewComment(comment)||isClaudeTV2AlertComment(comment);
 }
+const V3_COMMENT_ORDER=[
+  "Claude V3 1555",
+  "Claude V3 1M",
+  "Claude V3 1M 0.5",
+  "Claude V3 1M 0.54",
+  "Claude V3 1M 155",
+  "Claude V3 2M",
+  "Claude V3 3M"
+];
+const normalizedCommentKey=comment=>String(comment||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
+const v3CommentLabel=comment=>{
+  const key=normalizedCommentKey(comment);
+  return V3_COMMENT_ORDER.find(label=>normalizedCommentKey(label)===key)||null;
+};
 function isV3Comment(comment){
-  const normalized=String(comment||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"");
-  return normalized==="claudev31555"||normalized==="v31555";
+  return !!v3CommentLabel(comment)||normalizedCommentKey(comment)==="v31555";
 }
 function isTViewComment(comment){
   return /^ETView/i.test(String(comment||"").trim());
@@ -567,20 +580,25 @@ function accountsForView(accounts){
     }
     if(state.accountView==="V3" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
       const matcher=c=>isV3Comment(c);
-      const makeV3View=(viewLabel,groupTile=false)=>{
-        const metrics=computeMetrics(a.deals,a.rules,null,null,matcher);
-        const positions=(a.positions||[]).filter(p=>matcher(p?.comment));
+      const makeV3View=(viewMatcher,viewLabel,groupTile=false,sourceComment=null)=>{
+        const metrics=computeMetrics(a.deals,a.rules,null,null,viewMatcher);
+        const positions=(a.positions||[]).filter(p=>viewMatcher(p?.comment));
         const totalProfit=computeMetrics(a.deals,a.rules)?.profit||0;
         const balance=a.info?.balance==null ? a.info?.balance : a.info.balance+(metrics?.profit||0)-totalProfit;
         const floating=positions.reduce((sum,p)=>sum+(Number(p?.profit)||0),0);
         const equity=a.info?.equity==null ? a.info?.equity : balance==null ? a.info.equity : balance+floating;
-        const matchedPositionIds=new Set(a.deals.filter(d=>d.ty!==2&&matcher(d.cm)).map(d=>String(d.id||"")));
+        const matchedPositionIds=new Set(a.deals.filter(d=>d.ty!==2&&viewMatcher(d.cm)).map(d=>String(d.id||"")));
         const matchedDeals=a.deals.filter(d=>d.ty===2||matchedPositionIds.has(String(d.id||"")));
-        return {...a,info:{...a.info,sourceComment:"Claude V3 1555",...(viewLabel?{label:viewLabel}:{}),...(groupTile?{groupTile:true}:{}),balance,equity},metrics,positions,
-          dailyFloating:floatingForCommentMatcher(a,matcher),deals:matchedDeals};
+        return {...a,info:{...a.info,...(sourceComment?{sourceComment}:{}),...(viewLabel?{label:viewLabel}:{}),...(groupTile?{groupTile:true}:{}),balance,equity},metrics,positions,
+          dailyFloating:floatingForCommentMatcher(a,viewMatcher),deals:matchedDeals};
       };
-      out[login]=makeV3View("Claude V3 • 1555");
-      out[`${login}:V3:1555`]=makeV3View("Claude V3 • 1555",true);
+      out[login]=makeV3View(matcher,"Claude V3",false);
+      // Keep every configured comment visible while its first trades are pending.
+      V3_COMMENT_ORDER.forEach(comment=>{
+        const viewMatcher=c=>v3CommentLabel(c)===comment || (comment==="Claude V3 1555"&&normalizedCommentKey(c)==="v31555");
+        const key=comment==="Claude V3 1555"?"1555":normalizedCommentKey(comment);
+        out[`${login}:V3:${key}`]=makeV3View(viewMatcher,comment,true,comment);
+      });
       return;
     }
     if(state.accountView==="CLAUDE_3M_5M" && accountSuffix(login)==="3570" && Array.isArray(a.deals)){
@@ -2350,7 +2368,7 @@ function summaryTabHTML(accounts){
 
 function claude35SummaryTabHTML(accounts){
   const tiles=Object.entries(accounts||{})
-    .filter(([login,a])=>String(login).includes(":Claude35:")&&a?.info?.groupTile)
+    .filter(([login,a])=>(String(login).includes(":Claude35:")||String(login).includes(":V3:"))&&a?.info?.groupTile)
     .sort(([,a],[,b])=>String(a?.info?.label||"").localeCompare(String(b?.info?.label||""),undefined,{numeric:true,sensitivity:"base"}));
   const selectedTile=tiles.find(([login])=>login===state.selected);
   const focusTiles=selectedTile?[selectedTile]:tiles;
@@ -2395,13 +2413,17 @@ function claude35SummaryTabHTML(accounts){
       }
       byKey.get(key).trades.push(trade);
     });
+    if(!groups.length&&tile?.info?.sourceComment){
+      const comment=tile.info.sourceComment;
+      groups.push({prefix:prefixFor(comment),comment,trades:[]});
+    }
     return {login,tile,groups,trades:groups.flatMap(group=>group.trades)};
   };
   const prepared=focusTiles.map(groupedForTile);
   const dateLabel=state.summaryPreset==="TODAY"?"Today":state.summaryPreset==="YDAY"?"Yesterday":state.summaryPreset==="CUSTOM"?"Custom":"All time";
   let h=`<div class="panel" style="padding:16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;overflow-x:auto;white-space:nowrap">
-      <div class="sect" style="margin-bottom:0">3M, 5M &amp; Claude V3 summary <span style="color:var(--dim);text-transform:none;letter-spacing:0">• closed trades grouped by prefix and comment</span></div>
+      <div class="sect" style="margin-bottom:0">${state.accountView==="V3"?"Claude V3":"3M, 5M &amp; Claude V3"} summary <span style="color:var(--dim);text-transform:none;letter-spacing:0">• closed trades grouped by prefix and comment</span></div>
       <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
         <span style="font-size:12px;color:var(--dim)">Date</span>
         <select style="max-width:150px;padding:7px 10px;font-size:12px" onchange="setSummaryFilter('summaryPreset',this.value)">
@@ -2412,7 +2434,7 @@ function claude35SummaryTabHTML(accounts){
     </div>
     <div style="font-size:12px;color:var(--dim);margin:10px 0 12px">Showing ${dateLabel.toLowerCase()} closed trades for ${selectedTile?`the selected ${esc(String(selectedTile[1]?.info?.label||"Master"))} tile`:`all grouped tiles`}.</div>`;
   if(!prepared.length){
-    h+=`<div class="tblwrap"><table><tr><td style="color:var(--dim);font-size:13px">No 3M, 5M, or V3 trade data available.</td></tr></table></div>`;
+    h+=`<div class="tblwrap"><table><tr><td style="color:var(--dim);font-size:13px">No ${state.accountView==="V3"?"Claude V3":"3M, 5M, or V3"} trade data available.</td></tr></table></div>`;
   } else {
     h+=`<div class="tblwrap"><table><tr><th>Tile</th><th>Prefix</th><th>Comment</th><th>Total orders</th><th>Buy/Sell</th><th>TP/SL</th><th>Other exits (W/L)</th><th>Win %</th><th>Loss rate</th><th>P/L</th></tr>`;
     const allTrades=[];
@@ -2437,6 +2459,7 @@ function accountTabHTML(login,a,color,summaryAccounts=null){
   const stale=info?.updatedAt?(Date.now()/1000-info.updatedAt>180):false;
   let h="";
   if(stale) h+=`<div class="alert warn">⚠ Terminal offline — last update ${ago(info.updatedAt*1000)}. Showing last known data.</div>`;
+  if(state.tab==="summary" && ["CLAUDE_3M_5M","V3"].includes(state.accountView)) return h+claude35SummaryTabHTML(summaryAccounts||{});
   if(!m) return h+`<div class="panel loading">No history yet — the EA pushes deal history every 10 minutes.</div>`;
   if(state.tab==="overview") h+=tabOverview(login,a,color,cur);
   else if(state.tab==="advanced") h+=tabAdvanced(m,cur);
@@ -2445,7 +2468,6 @@ function accountTabHTML(login,a,color,summaryAccounts=null){
   else if(state.tab==="tpSl") h+=tabTPSL(m,cur,a);
   else if(state.tab==="winners") h+=tabWinners(m,cur,color,a);
   else if(state.tab==="trades") h+=tabTrades(m,a,cur);
-  else if(state.tab==="summary" && state.accountView==="CLAUDE_3M_5M") h+=claude35SummaryTabHTML(summaryAccounts||{});
   else if(state.tab==="summary" && ["CLAUDE","CLAUDE_EA","CLAUDE_TV2","V3","CLAUDE_NEW","CLAUDE_R","S1","S2","TVIEW","OVERALL"].includes(state.accountView)) h+=summaryTabHTML(summaryAccounts||{});
   return h;
 }
